@@ -17,6 +17,9 @@ htmlcov/
 .venv/
 venv/
 backend/psrm/
+**/.venv/
+**/venv/
+**/__pycache__/
 
 # Environment files
 .env
@@ -45,6 +48,7 @@ Thumbs.db
 backend/data/uploads/
 backend/data/complaints/
 backend/data/embeddings/
+backend/data/tmp/
 
 # Build and temporary files
 *.log

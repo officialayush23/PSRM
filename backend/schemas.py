@@ -2,7 +2,7 @@ from typing import List, Optional
 from uuid import UUID
 
 from fastapi import UploadFile
-from pydantic import BaseModel, ConfigDict, Field, UUID4
+from pydantic import BaseModel, ConfigDict, Field
 
 class ComplaintCreate(BaseModel):
     text: str
@@ -45,15 +45,39 @@ class ComplaintIngestResponse(BaseModel):
     is_repeat_complaint: bool
     is_new_infra_node: bool
     repeat_gap_days: Optional[int]
-    jurisdiction_id: UUID
+    jurisdiction_id: Optional[UUID]
 
 class ComplaintResponse(BaseModel):
     id: int
     status: str
     message: str
 
+
+class SignUpRequest(BaseModel):
+    full_name: str
+    email: str
+    password: str
+    city_code: Optional[str] = None
+    preferred_language: Optional[str] = "hi"
+
+
+class SignInRequest(BaseModel):
+    email: str
+    password: str
+
+
+class AuthResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    expires_in: int
+    user_id: UUID
+    role: str
+    email: str
+    full_name: str
+
+
 class TokenData(BaseModel):
-    user_id: UUID4
+    user_id: UUID
     role: str
     
 class SurveySubmit(BaseModel):

@@ -2,12 +2,15 @@ import client from "./client";
 
 export async function submitComplaint({ text, lat, lng, image }) {
   const formData = new FormData();
-  formData.append("text", text);
+  formData.append("description", text);
+  formData.append("original_language", "en");
   formData.append("lat", String(lat));
   formData.append("lng", String(lng));
-  formData.append("image", image);
+  if (image) {
+    formData.append("image", image);
+  }
 
-  const response = await client.post("/complaints/", formData, {
+  const response = await client.post("/complaints/ingest", formData, {
     headers: {
       "Content-Type": "multipart/form-data",
     },

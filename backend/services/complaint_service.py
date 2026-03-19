@@ -1,6 +1,5 @@
 import json
-import uuid
-from pathlib import Path
+import logging
 from typing import Dict, Iterable, List, Optional
 
 from google import genai
@@ -10,21 +9,9 @@ from sqlalchemy.orm import Session
 from config import settings
 from schemas import ComplaintIngestRequest, ComplaintIngestResponse
 from services.embedding_service import create_complaint_embeddings
+from services.storage_service import save_embedding_artifact, save_upload
 
-BASE_DIR = Path(__file__).resolve().parents[1]
-UPLOADS_DIR = BASE_DIR / "data" / "uploads"
-
-
-def _ensure_uploads_dir() -> None:
-    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
-
-
-def _save_upload(content: bytes, filename: str) -> str:
-    _ensure_uploads_dir()
-    suffix = Path(filename or "upload.bin").suffix
-    path = UPLOADS_DIR / f"{uuid.uuid4()}{suffix}"
-    path.write_bytes(content)
-    return str(path)
+logger = logging.getLogger(__name__)
 
 
 def _vector_literal(values: Optional[Iterable[float]]) -> Optional[str]:
@@ -43,17 +30,22 @@ def _translate_to_english(description: str, original_language: str) -> str:
     if original_language.lower().startswith("en"):
         return description
 
-    client = genai.Client(api_key=settings.GEMINI_API_KEY)
-    prompt = (
-        "Translate this complaint to English and return only translated text.\n"
-        f"Language: {original_language}\n"
-        f"Complaint: {description}"
-    )
-    response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-    translated = (response.text or "").strip()
-    if not translated:
-        raise ValueError("Gemini translation returned empty text")
-    return translated
+    try:
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        prompt = (
+            "Translate this complaint to English and return only translated text.\n"
+            f"Language: {original_language}\n"
+            f"Complaint: {description}"
+        )
+        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        translated = (response.text or "").strip()
+        if translated:
+            return translated
+        logger.warning("Gemini translation returned empty text; using original description")
+    except Exception as exc:
+        logger.warning("Gemini translation failed; using original description: %s", exc)
+
+    return description
 
 
 def _insert_domain_event(
@@ -103,20 +95,21 @@ def _insert_domain_event(
 
 async def ingest_complaint(db: Session, request: ComplaintIngestRequest) -> ComplaintIngestResponse:
     images_payload: List[Dict[str, str]] = []
-    primary_image_path: Optional[str] = None
+    primary_image_local_path: Optional[str] = None
 
     for upload in request.images:
         content = await upload.read()
         if not content:
             continue
 
-        saved_path = _save_upload(content, upload.filename or "image.bin")
-        if primary_image_path is None:
-            primary_image_path = saved_path
+        saved = save_upload(content, upload.filename or "image.bin", upload.content_type)
+        if primary_image_local_path is None:
+            primary_image_local_path = saved["local_path"]
 
         images_payload.append(
             {
-                "url": saved_path,
+                "url": saved["url"],
+                "storage": saved["storage"],
                 "mime_type": upload.content_type or "application/octet-stream",
             }
         )
@@ -125,13 +118,15 @@ async def ingest_complaint(db: Session, request: ComplaintIngestRequest) -> Comp
     if request.voice_recording is not None:
         voice_content = await request.voice_recording.read()
         if voice_content:
-            voice_recording_url = _save_upload(
+            saved_voice = save_upload(
                 voice_content,
                 request.voice_recording.filename or "voice.bin",
+                request.voice_recording.content_type,
             )
+            voice_recording_url = saved_voice["url"]
 
     translated_description = _translate_to_english(request.description, request.original_language)
-    embeddings = create_complaint_embeddings(translated_description, primary_image_path)
+    embeddings = create_complaint_embeddings(translated_description, primary_image_local_path)
     text_embedding = embeddings["text_embedding"]
     image_embedding = embeddings["image_embedding"]
 
@@ -186,6 +181,18 @@ async def ingest_complaint(db: Session, request: ComplaintIngestRequest) -> Comp
         raise ValueError("fn_ingest_complaint returned no row")
 
     complaint_id = str(row["complaint_id"])
+
+    embedding_artifact = save_embedding_artifact(
+        complaint_id,
+        {
+            "complaint_id": complaint_id,
+            "embedding_model": request.embedding_model or "nomic-embed-text-v1.5",
+            "translated_description": translated_description,
+            "text_embedding": text_embedding,
+            "image_embedding": image_embedding,
+        },
+    )
+
     city_id = str(request.city_id)
     citizen_id = str(request.citizen_id)
     payload = {
@@ -197,6 +204,8 @@ async def ingest_complaint(db: Session, request: ComplaintIngestRequest) -> Comp
         "is_repeat_complaint": bool(row["is_repeat_complaint"]),
         "repeat_gap_days": row["repeat_gap_days"],
         "jurisdiction_id": str(row["jurisdiction_id"]),
+        "embedding_artifact_url": embedding_artifact["url"],
+        "embedding_artifact_storage": embedding_artifact["storage"],
     }
 
     if row["workflow_instance_id"] is None:

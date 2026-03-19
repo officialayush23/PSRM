@@ -185,6 +185,17 @@ h1 {
   font-weight: 600;
 }
 
+.auth-helper {
+  text-align: center;
+  margin: 0;
+  color: #334155;
+}
+
+.auth-helper a {
+  color: #0f172a;
+  font-weight: 600;
+}
+
 .location-status {
   text-align: center;
   font-size: 0.85rem;

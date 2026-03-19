@@ -1,1 +1,18 @@
 .env
+
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+**/__pycache__/
+
+# Local virtual environments
+venv/
+.venv/
+psrm/
+
+# Local runtime data
+data/uploads/
+data/complaints/
+data/embeddings/

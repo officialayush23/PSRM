@@ -1,92 +1,62 @@
-from pathlib import Path
-import uuid
-from typing import Optional
+from typing import List, Optional
+from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, Header, HTTPException, Query, UploadFile
-from services.complaint_service import (
-    build_and_store_complaint,
-    get_complaint_by_id,
-    run_embedding_background_task,
-)
+from fastapi import APIRouter, Depends, File, Form, UploadFile
+from sqlalchemy.orm import Session
+
+from db import get_db
+from schemas import ComplaintIngestRequest, ComplaintIngestResponse
+from services.complaint_service import ingest_complaint as ingest_complaint_service
 
 router = APIRouter(prefix="/complaints", tags=["Complaints"])
 
-VALID_USERNAME = "admin"
-VALID_PASSWORD = "admin123"
-BASE_DIR = Path(__file__).resolve().parents[1]
-UPLOADS_DIR = BASE_DIR / "data" / "uploads"
-
-
-def _get_auth_value(
-    header_value: Optional[str],
-    query_value: Optional[str],
-) -> Optional[str]:
-    return header_value if header_value is not None else query_value
-
-
-def verify_simulated_auth(
-    username_query: Optional[str] = Query(default=None, alias="username"),
-    password_query: Optional[str] = Query(default=None, alias="password"),
-    username_header: Optional[str] = Header(default=None, alias="username"),
-    password_header: Optional[str] = Header(default=None, alias="password"),
-) -> None:
-    username = _get_auth_value(username_header, username_query)
-    password = _get_auth_value(password_header, password_query)
-    if username != VALID_USERNAME or password != VALID_PASSWORD:
-        raise HTTPException(status_code=401, detail="Invalid credentials")
-
-
-@router.post("/")
+@router.post("/ingest", response_model=ComplaintIngestResponse)
 async def ingest_complaint(
-    background_tasks: BackgroundTasks,
-    text: str = Form(...),
+    citizen_id: UUID = Form(...),
+    city_id: UUID = Form(...),
+    city_code: str = Form(...),
+    title: str = Form(...),
+    description: str = Form(...),
+    original_language: str = Form("hi"),
     lat: float = Form(...),
     lng: float = Form(...),
-    image: UploadFile = File(...),
-    _: None = Depends(verify_simulated_auth),
+    infra_type_id: UUID = Form(...),
+    address_text: Optional[str] = Form(default=None),
+    infra_name: Optional[str] = Form(default=None),
+    priority: str = Form(default="normal"),
+    voice_transcript: Optional[str] = Form(default=None),
+    agent_summary: Optional[str] = Form(default=None),
+    agent_priority_reason: Optional[str] = Form(default=None),
+    embedding_model: str = Form(default="nomic-embed-text-v1.5"),
+    agent_suggested_dept_ids: Optional[str] = Form(default=None),
+    images: List[UploadFile] = File(default=[]),
+    voice_recording: Optional[UploadFile] = File(default=None),
+    db: Session = Depends(get_db),
 ):
-    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+    suggested_dept_ids = []
+    if agent_suggested_dept_ids:
+        suggested_dept_ids = [item.strip() for item in agent_suggested_dept_ids.split(",") if item.strip()]
 
-    cleaned_text = text.strip()
-    if not cleaned_text:
-        raise HTTPException(status_code=400, detail="Complaint text is required")
-
-    if not (-90 <= lat <= 90 and -180 <= lng <= 180):
-        raise HTTPException(status_code=400, detail="Invalid latitude/longitude")
-
-    image_bytes = await image.read()
-    if not image_bytes:
-        raise HTTPException(status_code=400, detail="Uploaded image is empty")
-
-    suffix = Path(image.filename or "upload.bin").suffix
-    stored_image_path = UPLOADS_DIR / f"{uuid.uuid4()}{suffix}"
-    stored_image_path.write_bytes(image_bytes)
-
-    complaint = build_and_store_complaint(
-        text=cleaned_text,
-        image_bytes=image_bytes,
-        image_content_type=image.content_type or "application/octet-stream",
-        image_url=str(stored_image_path),
+    request = ComplaintIngestRequest(
+        citizen_id=citizen_id,
+        city_id=city_id,
+        city_code=city_code,
+        title=title,
+        description=description,
+        original_language=original_language,
         lat=lat,
         lng=lng,
+        infra_type_id=infra_type_id,
+        address_text=address_text,
+        infra_name=infra_name,
+        priority=priority,
+        voice_transcript=voice_transcript,
+        agent_summary=agent_summary,
+        agent_priority_reason=agent_priority_reason,
+        agent_suggested_dept_ids=suggested_dept_ids,
+        embedding_model=embedding_model,
+        images=images,
+        voice_recording=voice_recording,
     )
 
-    background_tasks.add_task(
-        run_embedding_background_task,
-        complaint["complaint_id"],
-        complaint["text"],
-        complaint["image_url"],
-    )
-
-    return complaint
-
-
-@router.get("/{complaint_id}")
-def fetch_complaint(
-    complaint_id: str,
-    _: None = Depends(verify_simulated_auth),
-):
-    complaint = get_complaint_by_id(complaint_id)
-    if complaint is None:
-        raise HTTPException(status_code=404, detail="Complaint not found")
-    return complaint
+    return await ingest_complaint_service(db, request)

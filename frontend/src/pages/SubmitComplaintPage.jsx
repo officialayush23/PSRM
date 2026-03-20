@@ -5,6 +5,7 @@ import "leaflet/dist/leaflet.css";
 import { MapContainer, Marker, TileLayer, useMapEvents } from "react-leaflet";
 import { submitComplaint } from "../api/complaintsApi";
 import AppLayout from "../components/AppLayout";
+import { toast } from "sonner";
 
 const markerIcon = new L.Icon({
   iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
@@ -46,7 +47,6 @@ export default function SubmitComplaintPage() {
   const [imagePreview, setImagePreview] = useState(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
 
-  const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const requestCurrentLocation = () => {
@@ -91,7 +91,7 @@ export default function SubmitComplaintPage() {
       if (videoRef.current) videoRef.current.srcObject = stream;
     } catch (err) {
       console.error(err);
-      setError("Webcam access denied or unavailable.");
+      toast.error("Webcam access denied or unavailable.");
       setIsCameraActive(false);
     }
   };
@@ -134,15 +134,27 @@ export default function SubmitComplaintPage() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
+  const openImageSourcePicker = () => {
+    toast("Choose photo source", {
+      action: {
+        label: "Use Webcam",
+        onClick: () => startCamera(),
+      },
+      cancel: {
+        label: "Upload File",
+        onClick: () => fileInputRef.current?.click(),
+      },
+    });
+  };
+
   const handleSubmit = async (event) => {
     event.preventDefault();
-    setError("");
     if (!image) {
-      setError("Please take a photo or upload an image.");
+      toast.error("Please take a photo or upload an image.");
       return;
     }
     if (lat === null || lng === null) {
-      setError("Location is required. Allow GPS or pin on map.");
+      toast.error("Location is required. Allow GPS or pin on map.");
       return;
     }
     setIsSubmitting(true);
@@ -150,7 +162,7 @@ export default function SubmitComplaintPage() {
       const complaint = await submitComplaint({ text: text || "Issue observed at location", lat, lng, image });
       navigate(`/complaints/${complaint.complaint_id}`);
     } catch (err) {
-      setError(err.response?.data?.detail || "Complaint submission failed");
+      toast.error(err.response?.data?.detail || "Complaint submission failed");
     } finally {
       setIsSubmitting(false);
     }
@@ -199,11 +211,7 @@ export default function SubmitComplaintPage() {
               ) : (
                 <div
                   className="flex flex-col items-center gap-3 cursor-pointer group"
-                  onClick={() => {
-                    const choice = window.confirm("Use Webcam? (Click Cancel to upload a file instead)");
-                    if (choice) startCamera();
-                    else fileInputRef.current?.click();
-                  }}
+                  onClick={openImageSourcePicker}
                 >
                   <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
                     <span className="material-symbols-outlined text-primary text-3xl">photo_camera</span>
@@ -268,14 +276,6 @@ export default function SubmitComplaintPage() {
             Supports Hindi, English, and 20+ Indian languages via Bhashini
           </p>
         </div>
-
-        {/* Error */}
-        {error && (
-          <div className="flex items-center gap-2 px-4 py-3 bg-error-container/50 rounded-lg">
-            <span className="material-symbols-outlined text-error text-sm">error</span>
-            <p className="text-sm font-medium text-on-error-container">{error}</p>
-          </div>
-        )}
 
         {/* Submit Button */}
         <button

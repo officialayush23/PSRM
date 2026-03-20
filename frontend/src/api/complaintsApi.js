@@ -6,9 +6,8 @@ export async function submitComplaint({ text, lat, lng, image, language = "en" }
   formData.append("original_language", language);
   formData.append("lat", String(lat));
   formData.append("lng", String(lng));
-  if (image) {
-    formData.append("image", image);
-  }
+  if (image) formData.append("image", image);
+
   const response = await client.post("/complaints/ingest", formData, {
     headers: { "Content-Type": "multipart/form-data" },
   });
@@ -16,28 +15,37 @@ export async function submitComplaint({ text, lat, lng, image, language = "en" }
 }
 
 export async function fetchComplaintById(complaintId) {
-  const response = await client.get(`/complaints/${complaintId}`);
-  return response.data;
+  const { data } = await client.get(`/complaints/${complaintId}`);
+  return data;
 }
 
 export async function fetchMyComplaints({ limit = 20, offset = 0, status } = {}) {
   const params = { limit, offset };
   if (status) params.status = status;
-  const response = await client.get("/complaints", { params });
-  return response.data; // { total, limit, offset, items: [...] }
+  const { data } = await client.get("/complaints", { params });
+  return data; // { total, limit, offset, items }
 }
 
 export async function fetchComplaintHistory(complaintId) {
-  const response = await client.get(`/complaints/${complaintId}/history`);
-  return response.data; // [{old_status, new_status, reason, created_at}]
+  const { data } = await client.get(`/complaints/${complaintId}/history`);
+  return data;
 }
 
+// My own complaint locations — used only for "My Complaints" map if needed
 export async function fetchMapPins() {
-  const response = await client.get("/complaints/map-pins");
-  return response.data; // [{id, complaint_number, title, status, lat, lng}]
+  const { data } = await client.get("/complaints/map-pins");
+  return data;
+}
+
+// ALL complaints within radius_meters of (lat, lng) — used by Dashboard map
+export async function fetchNearbyComplaints(lat, lng, radiusMeters = 4000) {
+  const { data } = await client.get("/complaints/nearby", {
+    params: { lat, lng, radius_meters: radiusMeters },
+  });
+  return data;
 }
 
 export async function fetchMyStats() {
-  const response = await client.get("/stats/me");
-  return response.data; // {total_count, active_count, resolved_count, avg_resolution_days}
+  const { data } = await client.get("/stats/me");
+  return data;
 }

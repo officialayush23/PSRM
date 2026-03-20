@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import AppLayout from "../components/AppLayout";
 import { fetchMyComplaints, fetchMyStats } from "../api/complaintsApi";
+import { toast } from "sonner";
 
 const STATUS_LABEL = {
   received: "Received",
@@ -59,7 +60,6 @@ export default function MyComplaintsPage() {
   const [complaints, setComplaints] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
 
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -75,7 +75,7 @@ export default function MyComplaintsPage() {
         setComplaints(listRes.items || []);
         setStats(statsRes);
       } catch (e) {
-        setError("Failed to load complaints.");
+        toast.error("Failed to load complaints.");
       } finally {
         setLoading(false);
       }
@@ -164,12 +164,6 @@ export default function MyComplaintsPage() {
             ))}
           </select>
         </div>
-
-        {error && (
-          <div className="bg-error/10 border border-error/30 rounded-xl p-4 text-error text-sm">
-            {error}
-          </div>
-        )}
 
         {/* Table */}
         <div className="bg-surface-container-low border border-outline-variant rounded-2xl overflow-hidden">

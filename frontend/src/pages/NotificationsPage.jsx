@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import AppLayout from "../components/AppLayout";
 import { fetchMyComplaints } from "../api/complaintsApi";
+import { toast } from "sonner";
 
 const STATUS_LABEL = {
   received: "Received",
@@ -103,7 +104,6 @@ const FILTER_TABS = ["All", "Unread", "Complaints", "Surveys"];
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState("All");
 
   useEffect(() => {
@@ -113,7 +113,7 @@ export default function NotificationsPage() {
         const res = await fetchMyComplaints({ limit: 50 });
         setNotifications(complaintsToNotifications(res.items || []));
       } catch (e) {
-        setError("Failed to load notifications.");
+        toast.error("Failed to load notifications.");
       } finally {
         setLoading(false);
       }
@@ -188,12 +188,6 @@ export default function NotificationsPage() {
             </button>
           ))}
         </div>
-
-        {error && (
-          <div className="bg-error/10 border border-error/30 rounded-xl p-4 text-error text-sm">
-            {error}
-          </div>
-        )}
 
         {/* Notification List */}
         <div className="flex flex-col gap-2">

@@ -62,6 +62,66 @@ def get_map_pins(
     ]
 
 
+@router.get("/nearby")
+def get_nearby_complaints(
+    lat: float = Query(..., description="User latitude"),
+    lng: float = Query(..., description="User longitude"),
+    radius_meters: int = Query(default=4000, le=10000, description="Radius in metres"),
+    limit: int = Query(default=100, le=200),
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    """
+    Returns ALL citizens' complaints within `radius_meters` of the given point.
+    Used by the dashboard map to show the civic picture around the user's location.
+    Default radius: 4 km.
+    """
+    rows = db.execute(
+        text("""
+            SELECT
+                c.id,
+                c.complaint_number,
+                c.title,
+                c.status,
+                c.priority,
+                c.is_repeat_complaint,
+                c.created_at,
+                ST_Y(c.location::geometry)                                      AS lat,
+                ST_X(c.location::geometry)                                      AS lng,
+                ST_Distance(
+                    c.location::geography,
+                    ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography
+                )                                                               AS distance_meters
+            FROM complaints c
+            WHERE c.is_deleted = FALSE
+              AND c.location IS NOT NULL
+              AND ST_DWithin(
+                    c.location::geography,
+                    ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+                    :radius
+              )
+            ORDER BY c.created_at DESC
+            LIMIT :limit
+        """),
+        {"lat": lat, "lng": lng, "radius": radius_meters, "limit": limit},
+    ).mappings().all()
+
+    return [
+        {
+            "id":                   str(row["id"]),
+            "complaint_number":     row["complaint_number"],
+            "title":                row["title"],
+            "status":               row["status"],
+            "priority":             row["priority"],
+            "is_repeat_complaint":  bool(row["is_repeat_complaint"]),
+            "lat":                  float(row["lat"]),
+            "lng":                  float(row["lng"]),
+            "distance_meters":      round(float(row["distance_meters"])),
+            "created_at":           row["created_at"].isoformat() if row["created_at"] else None,
+        }
+        for row in rows
+    ]
+    
 @router.get("")
 def list_my_complaints(
     status: Optional[str] = Query(default=None, description="Filter by status"),
@@ -354,3 +414,4 @@ def append_complaint_image(
     db.commit()
 
     return {"message": "Image appended successfully", "image": new_image}
+

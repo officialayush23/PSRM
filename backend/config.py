@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     GCS_SERVICE_ACCOUNT_KEY_PATH: Optional[str] = None
     GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None
     FIREBASE_SERVICE_ACCOUNT_PATH: str = "serviceAccountKey.json"
+    PUBSUB_ENABLED: bool = False
 
     class Config:
         env_file = ".env"

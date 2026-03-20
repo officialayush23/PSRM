@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { signup } from "../api/authApi";
+import { toast } from "sonner";
 
 export default function SignupPage() {
   const navigate = useNavigate();
@@ -8,12 +9,10 @@ export default function SignupPage() {
   const [email, setEmail]         = useState("");
   const [password, setPassword]   = useState("");
   const [cityCode, setCityCode]   = useState("DEL");
-  const [error, setError]         = useState("");
   const [loading, setLoading]     = useState(false);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
-    setError("");
     setLoading(true);
 
     try {
@@ -32,14 +31,14 @@ export default function SignupPage() {
     } catch (err) {
       // Firebase-specific error codes
       if (err.code === "auth/email-already-in-use") {
-        setError("This email is already registered. Please sign in.");
+        toast.error("This email is already registered. Please sign in.");
       } else if (err.code === "auth/weak-password") {
-        setError("Password must be at least 6 characters.");
+        toast.error("Password must be at least 6 characters.");
       } else if (err.code === "auth/invalid-email") {
-        setError("Please enter a valid email address.");
+        toast.error("Please enter a valid email address.");
       } else {
         // Backend errors (409 duplicate, 400 bad city, etc.)
-        setError(err.response?.data?.detail || err.message || "Signup failed.");
+        toast.error(err.response?.data?.detail || err.message || "Signup failed.");
       }
     } finally {
       setLoading(false);
@@ -113,13 +112,6 @@ export default function SignupPage() {
         <button className="submit-btn-large" type="submit" disabled={loading}>
           {loading ? "Creating account..." : "Create Account"}
         </button>
-
-            {error && (
-              <div className="flex items-center gap-2 px-4 py-3 bg-error-container/50 rounded-lg">
-                <span className="material-symbols-outlined text-error text-sm">error</span>
-                <p className="text-sm font-medium text-on-error-container">{error}</p>
-              </div>
-            )}
 
             <button
               type="submit"

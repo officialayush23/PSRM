@@ -82,6 +82,7 @@ def get_nearby_complaints(
                 c.is_repeat_complaint,
                 c.created_at,
                 c.infra_node_id,
+                c.images,
                 ST_Y(c.location::geometry)                          AS lat,
                 ST_X(c.location::geometry)                          AS lng,
                 ST_Distance(
@@ -126,6 +127,11 @@ def get_nearby_complaints(
             "infra_node_id":        str(row["infra_node_id"]) if row["infra_node_id"] else None,
             "node_status":          row["node_status"],
             "node_complaint_count": row["total_complaint_count"],
+            "thumbnail_url": (
+    row["images"][0]["url"]
+    if row["images"] and isinstance(row["images"], list) and len(row["images"]) > 0
+    else None
+),
         }
         for row in rows
     ]
@@ -162,6 +168,7 @@ def get_all_complaints_map(
                 c.priority,
                 c.is_repeat_complaint,
                 c.created_at,
+                c.images,
                 c.infra_node_id,
                 ST_Y(c.location::geometry)  AS lat,
                 ST_X(c.location::geometry)  AS lng,
@@ -192,6 +199,11 @@ def get_all_complaints_map(
             "lng":                  float(row["lng"]),
             "distance_meters":      None,
             "created_at":           row["created_at"].isoformat() if row["created_at"] else None,
+            "thumbnail_url": (
+            row["images"][0]["url"]
+            if row["images"] and isinstance(row["images"], list) and len(row["images"]) > 0
+            else None
+        ),
             "infra_type_name":      row["infra_type_name"],
             "infra_type_code":      row["infra_type_code"],
             "infra_node_id":        str(row["infra_node_id"]) if row["infra_node_id"] else None,

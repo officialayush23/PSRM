@@ -1,8 +1,11 @@
 # backend/services/notification_service.py
 """
 Notification dispatcher — Firebase FCM + SMTP only.
-Called by the Pub/Sub webhook when a notification event arrives.
+Aligned with notification_logs schema:
+  recipient_user_id, recipient_contact, channel, event_type,
+  complaint_id, payload, status
 """
+import json
 import logging
 import smtplib
 import ssl
@@ -19,6 +22,7 @@ logger = logging.getLogger(__name__)
 
 # ── Firebase Admin SDK init ───────────────────────────────────────
 _firebase_initialized = False
+
 
 def _ensure_firebase():
     global _firebase_initialized
@@ -98,7 +102,7 @@ def _render_template(
     lang = "hi" if language == "hi" else "en"
 
     title = tmpl.get(f"title_{lang}", tmpl.get("title_en", "PS-CRM Update"))
-    body  = tmpl.get(f"body_{lang}",  tmpl.get("body_en",  ""))
+    body  = tmpl.get(f"body_{lang}",  tmpl.get("body_en", ""))
 
     for k, v in variables.items():
         title = title.replace(f"{{{k}}}", str(v))
@@ -174,7 +178,11 @@ def send_email(
 def _make_html_email(title: str, body: str, cta_url: Optional[str] = None) -> str:
     cta_block = ""
     if cta_url:
-        cta_block = f'<a href="{cta_url}" style="display:inline-block;margin-top:16px;padding:10px 24px;background:#6750A4;color:white;border-radius:8px;text-decoration:none;font-weight:600;">View Details</a>'
+        cta_block = (
+            f'<a href="{cta_url}" style="display:inline-block;margin-top:16px;'
+            f'padding:10px 24px;background:#6750A4;color:white;border-radius:8px;'
+            f'text-decoration:none;font-weight:600;">View Details</a>'
+        )
     return f"""
     <div style="font-family:system-ui,sans-serif;max-width:520px;margin:0 auto;padding:24px;">
       <div style="background:#6750A4;color:white;padding:16px 24px;border-radius:12px 12px 0 0;">
@@ -206,13 +214,13 @@ def dispatch_notification(
 ) -> Dict[str, bool]:
     """
     Fetches user contact details and dispatches FCM + email.
-    Writes result to notification_logs.
+    Writes result to notification_logs (aligned with final.sql schema).
     Returns {fcm: bool, email: bool}.
     """
     user = db.execute(
         text("""
-            SELECT full_name, email, preferred_language, fcm_token,
-                   email_opt_in
+            SELECT full_name, email, phone, preferred_language, fcm_token,
+                   email_opt_in, twilio_opt_in
             FROM users WHERE id = CAST(:uid AS uuid)
         """),
         {"uid": user_id},
@@ -222,11 +230,11 @@ def dispatch_notification(
         logger.warning("dispatch_notification: user %s not found", user_id)
         return {"fcm": False, "email": False}
 
-    lang      = user["preferred_language"] or "hi"
-    rendered  = _render_template(event_type, lang, variables)
-    title     = rendered["title"]
-    body      = rendered["body"]
-    results   = {"fcm": False, "email": False}
+    lang     = user["preferred_language"] or "hi"
+    rendered = _render_template(event_type, lang, variables)
+    title    = rendered["title"]
+    body     = rendered["body"]
+    results  = {"fcm": False, "email": False}
 
     # ── FCM ───────────────────────────────────────────────────────
     if user["fcm_token"]:
@@ -235,6 +243,17 @@ def dispatch_notification(
             title=title,
             body=body,
             data={"event_type": event_type, **data},
+        )
+        # Log FCM attempt — recipient_contact = fcm_token (truncated)
+        _write_notif_log(
+            db,
+            user_id=user_id,
+            contact=user["fcm_token"][:80],
+            channel="fcm",
+            event_type=event_type,
+            payload={"title": title, "body": body, "data": data},
+            status="sent" if results["fcm"] else "failed",
+            data=data,
         )
 
     # ── Email ─────────────────────────────────────────────────────
@@ -246,37 +265,68 @@ def dispatch_notification(
             html_body=html,
             text_body=body,
         )
-
-    # ── Log ───────────────────────────────────────────────────────
-    for channel, success in results.items():
-        if not user["fcm_token"] and channel == "fcm":
-            continue
-        db.execute(
-            text("""
-                INSERT INTO notification_logs (
-                    user_id, event_type, channel, status,
-                    template_key, rendered_title, rendered_body,
-                    metadata
-                ) VALUES (
-                    CAST(:uid AS uuid), :event_type, :channel,
-                    :status, :tkey, :rtitle, :rbody,
-                    CAST(:meta AS jsonb)
-                )
-            """),
-            {
-                "uid":        user_id,
-                "event_type": event_type,
-                "channel":    channel,
-                "status":     "sent" if success else "failed",
-                "tkey":       event_type,
-                "rtitle":     title,
-                "rbody":      body,
-                "meta":       json.dumps({"variables": variables, "data": data}),
-            },
+        _write_notif_log(
+            db,
+            user_id=user_id,
+            contact=user["email"],
+            channel="email",
+            event_type=event_type,
+            payload={"title": title, "body": body, "variables": variables},
+            status="sent" if results["email"] else "failed",
+            data=data,
         )
 
     db.commit()
     return results
+
+
+def _write_notif_log(
+    db: Session,
+    *,
+    user_id: str,
+    contact: str,
+    channel: str,
+    event_type: str,
+    payload: dict,
+    status: str,
+    data: dict,
+) -> None:
+    """
+    Inserts a row into notification_logs aligned with final.sql schema:
+      recipient_user_id, recipient_contact, channel, event_type,
+      complaint_id, payload, status
+    """
+    complaint_id = data.get("complaint_id")
+    try:
+        db.execute(
+            text("""
+                INSERT INTO notification_logs (
+                    recipient_user_id, recipient_contact,
+                    channel, event_type,
+                    complaint_id,
+                    payload, status
+                ) VALUES (
+                    CAST(:uid     AS uuid),
+                    :contact,
+                    :channel,
+                    :event_type,
+                    CAST(:cid     AS uuid),
+                    CAST(:payload AS jsonb),
+                    :status
+                )
+            """),
+            {
+                "uid":        user_id,
+                "contact":    contact,
+                "channel":    channel,
+                "event_type": event_type,
+                "cid":        complaint_id,
+                "payload":    json.dumps(payload),
+                "status":     status,
+            },
+        )
+    except Exception as exc:
+        logger.error("notification_logs write failed: %s", exc)
 
 
 # ── Area notification — all citizens in a jurisdiction ───────────
@@ -289,7 +339,7 @@ def notify_area_citizens(
     variables: Dict[str, str],
     data: Dict[str, str],
 ):
-    """Sends FCM to all citizens subscribed to a jurisdiction."""
+    """Sends FCM to all citizens subscribed in a jurisdiction."""
     rows = db.execute(
         text("""
             SELECT DISTINCT u.id

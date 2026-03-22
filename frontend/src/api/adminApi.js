@@ -16,14 +16,10 @@ export async function fetchDailyBriefing() {
   return data;
 }
 
+/** Send a chat message to the CRM agent with conversation history. */
 export async function sendCRMChat(message, history = []) {
-  const { data } = await client.post("/admin/crm/chat", null, {
-    params: { message },
-    // history as JSON body
-  });
-  // Use JSON body instead
-  const res = await client.post("/admin/crm/chat", { message, history });
-  return res.data;
+  const { data } = await client.post("/admin/crm/chat", { message, history });
+  return data;
 }
 
 // ── Complaint queue ───────────────────────────────────────────────
@@ -39,6 +35,13 @@ export async function fetchComplaintQueue({
   return data;
 }
 
+// ── Single complaint (admin view) ─────────────────────────────────
+
+export async function fetchComplaintAdmin(complaintId) {
+  const { data } = await client.get(`/admin/complaints/${complaintId}`);
+  return data;
+}
+
 // ── Workflow suggestions ──────────────────────────────────────────
 
 export async function fetchWorkflowSuggestions(complaintId) {
@@ -48,9 +51,9 @@ export async function fetchWorkflowSuggestions(complaintId) {
 
 export async function approveWorkflow(complaintId, templateId, editedSteps = null, editReason = null) {
   const { data } = await client.post(`/admin/complaints/${complaintId}/workflow-approve`, {
-    template_id:   templateId,
-    edited_steps:  editedSteps,
-    edit_reason:   editReason,
+    template_id:  templateId,
+    edited_steps: editedSteps,
+    edit_reason:  editReason,
   });
   return data;
 }
@@ -64,14 +67,13 @@ export async function fetchInfraNodeSummary(nodeId) {
 
 // ── Task assignment ───────────────────────────────────────────────
 
-export async function assignTask(taskId, { workerId, contractorId, officialId, notes } = {}) {
-  const { data } = await client.post(`/admin/tasks/${taskId}/assign`, null, {
-    params: {
-      worker_id:     workerId,
-      contractor_id: contractorId,
-      official_id:   officialId,
-      notes,
-    },
+export async function assignTask(taskId, { workerId, contractorId, officialId, notes, overrideReasonCode } = {}) {
+  const { data } = await client.post(`/admin/tasks/${taskId}/assign`, {
+    worker_id:            workerId,
+    contractor_id:        contractorId,
+    official_id:          officialId,
+    notes,
+    override_reason_code: overrideReasonCode,
   });
   return data;
 }
@@ -83,6 +85,15 @@ export async function fetchAvailableWorkers({ deptId, skill } = {}) {
   if (deptId) params.dept_id = deptId;
   if (skill)  params.skill   = skill;
   const { data } = await client.get("/admin/workers/available", { params });
+  return data;
+}
+
+// ── Contractors available ─────────────────────────────────────────
+
+export async function fetchAvailableContractors({ deptId } = {}) {
+  const params = {};
+  if (deptId) params.dept_id = deptId;
+  const { data } = await client.get("/admin/contractors/available", { params });
   return data;
 }
 
@@ -111,5 +122,21 @@ export async function fetchWorkerTasks(status = null) {
   const params = {};
   if (status) params.status = status;
   const { data } = await client.get("/worker/tasks", { params });
+  return data;
+}
+
+// ── Department list ───────────────────────────────────────────────
+
+export async function fetchDepartments() {
+  const { data } = await client.get("/admin/departments");
+  return data;
+}
+
+// ── Officials list (for assignment) ──────────────────────────────
+
+export async function fetchOfficials({ deptId } = {}) {
+  const params = {};
+  if (deptId) params.dept_id = deptId;
+  const { data } = await client.get("/admin/officials", { params });
   return data;
 }

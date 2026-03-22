@@ -1,7 +1,6 @@
 # backend/models.py
 
 import uuid
-import enum
 from sqlalchemy import (
     Column, String, Boolean, Integer, Text, Numeric,
     DateTime, Date, SmallInteger, ForeignKey, ARRAY,
@@ -96,6 +95,40 @@ class Department(Base):
     __table_args__ = (UniqueConstraint("city_id", "code"),)
 
 
+class DepartmentBranch(Base):
+    """
+    Sub-offices within a department.
+    An MCD Engineering branch covers a zone;
+    a PWD sub-division covers an arterial road cluster.
+    Aligned with final.sql department_branches table.
+    """
+    __tablename__ = "department_branches"
+
+    id               = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    department_id    = Column(UUID(as_uuid=True), ForeignKey("departments.id"), nullable=False)
+    city_id          = Column(UUID(as_uuid=True), ForeignKey("cities.id"), nullable=False)
+    jurisdiction_id  = Column(UUID(as_uuid=True), ForeignKey("jurisdictions.id"))
+    name             = Column(String(300), nullable=False)
+    code             = Column(String(50), nullable=False)
+    branch_type      = Column(String(30), nullable=False)   # CHECK constraint below
+    address          = Column(Text)
+    contact_phone    = Column(String(20))
+    contact_email    = Column(String(255))
+    head_official_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"))
+    is_active        = Column(Boolean, nullable=False, default=True)
+    extra_meta       = Column("metadata", JSONB, nullable=False, default=dict)
+    created_at       = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at       = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+    __table_args__ = (
+        CheckConstraint(
+            "branch_type IN ('zonal_office','ward_office','sub_division',"
+            "'divisional_office','regional_office','helpdesk')",
+            name="department_branches_branch_type_check",
+        ),
+    )
+
+
 class InfraType(Base):
     __tablename__ = "infra_types"
 
@@ -166,18 +199,18 @@ class Contractor(Base):
 class Worker(Base):
     __tablename__ = "workers"
 
-    id                = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id           = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
-    department_id     = Column(UUID(as_uuid=True), ForeignKey("departments.id"))
-    contractor_id     = Column(UUID(as_uuid=True), ForeignKey("contractors.id"))
-    employee_id       = Column(String(100))
-    skills            = Column(ARRAY(Text), nullable=False, default=list)
-    is_available      = Column(Boolean, nullable=False, default=True)
+    id                 = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id            = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
+    department_id      = Column(UUID(as_uuid=True), ForeignKey("departments.id"))
+    contractor_id      = Column(UUID(as_uuid=True), ForeignKey("contractors.id"))
+    employee_id        = Column(String(100))
+    skills             = Column(ARRAY(Text), nullable=False, default=list)
+    is_available       = Column(Boolean, nullable=False, default=True)
     current_task_count = Column(Integer, nullable=False, default=0)
-    performance_score = Column(Numeric(4, 2), nullable=False, default=5.0)
-    extra_meta        = Column("metadata", JSONB, nullable=False, default=dict)
-    created_at        = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updated_at        = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    performance_score  = Column(Numeric(4, 2), nullable=False, default=5.0)
+    extra_meta         = Column("metadata", JSONB, nullable=False, default=dict)
+    created_at         = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at         = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 # ============================================================
@@ -193,7 +226,7 @@ class InfraNode(Base):
     infra_type_id             = Column(UUID(as_uuid=True), ForeignKey("infra_types.id"), nullable=False)
     name                      = Column(String(400))
     location                  = Column(Geometry("GEOMETRY", srid=4326), nullable=False)
-    location_hash             = Column(String, unique=False)
+    location_hash             = Column(String)
     status                    = Column(String(30), nullable=False, default="operational")
     attributes                = Column(JSONB, nullable=False, default=dict)
     last_resolved_at          = Column(DateTime(timezone=True))
@@ -228,7 +261,7 @@ class AssetHealthLog(Base):
 class Complaint(Base):
     __tablename__ = "complaints"
 
-    id           = Column(UUID(as_uuid=True), nullable=False, default=uuid.uuid4, primary_key=True)
+    id                           = Column(UUID(as_uuid=True), nullable=False, default=uuid.uuid4, primary_key=True)
     complaint_number             = Column(String(30), nullable=False)
     citizen_id                   = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="RESTRICT"), nullable=False)
     city_id                      = Column(UUID(as_uuid=True), ForeignKey("cities.id"), nullable=False)
@@ -268,7 +301,7 @@ class Complaint(Base):
     deleted_at                   = Column(DateTime(timezone=True))
     deleted_by                   = Column(UUID(as_uuid=True), ForeignKey("users.id"))
     deletion_reason              = Column(Text)
-    created_at   = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), primary_key=True)
+    created_at                   = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), primary_key=True)
     updated_at                   = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     __table_args__ = (
@@ -287,7 +320,6 @@ class ComplaintStatusHistory(Base):
     reason       = Column(Text)
     extra_meta   = Column("metadata", JSONB, nullable=False, default=dict)
     created_at   = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), primary_key=True)
-
 
     __table_args__ = (
         {"postgresql_partition_by": "RANGE (created_at)"},
@@ -329,16 +361,27 @@ class ComplaintEmbedding(Base):
 # ============================================================
 
 class WorkflowTemplate(Base):
+    """
+    Named base template. Aligned with final.sql workflow_templates table.
+    Includes AI-learning columns: situation_summary, situation_keywords,
+    times_used, avg_completion_days, last_used_at, source_complaint_ids.
+    """
     __tablename__ = "workflow_templates"
 
-    id          = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    city_id     = Column(UUID(as_uuid=True), ForeignKey("cities.id"), nullable=False)
-    name        = Column(String(300), nullable=False)
-    description = Column(Text)
-    created_by  = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    created_at  = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-
-    __table_args__ = (UniqueConstraint("city_id", "name"),)
+    id                   = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    city_id              = Column(UUID(as_uuid=True), ForeignKey("cities.id"), nullable=False)
+    name                 = Column(String(300), nullable=False)
+    description          = Column(Text)
+    created_by           = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    created_at           = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    # AI-learning / recommendation columns (from final.sql)
+    situation_summary    = Column(Text)
+    situation_keywords   = Column(ARRAY(Text), nullable=False, default=list)
+    situation_infra_codes= Column(ARRAY(Text), nullable=False, default=list)
+    times_used           = Column(Integer, nullable=False, default=0)
+    avg_completion_days  = Column(Numeric(5, 1))
+    last_used_at         = Column(DateTime(timezone=True))
+    source_complaint_ids = Column(ARRAY(UUID(as_uuid=True)), nullable=False, default=list)
 
 
 class WorkflowTemplateVersion(Base):
@@ -361,6 +404,14 @@ class WorkflowTemplateVersion(Base):
 
 
 class WorkflowTemplateStep(Base):
+    """
+    Steps tied to a specific version.
+    Columns: version_id, step_number, department_id, step_name,
+             description, expected_duration_hours, is_optional,
+             requires_tender, work_type_codes.
+    NOTE: There is no responsible_role, requires_photo, requires_approval —
+          those are from an older schema. Use department_id for routing.
+    """
     __tablename__ = "workflow_template_steps"
 
     id                      = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -393,48 +444,48 @@ class WorkflowStepDependency(Base):
 class WorkflowInstance(Base):
     __tablename__ = "workflow_instances"
 
-    id                   = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    infra_node_id        = Column(UUID(as_uuid=True), ForeignKey("infra_nodes.id"), nullable=False)
-    template_id          = Column(UUID(as_uuid=True), ForeignKey("workflow_templates.id"), nullable=False)
-    version_id           = Column(UUID(as_uuid=True), ForeignKey("workflow_template_versions.id"), nullable=False)
-    jurisdiction_id      = Column(UUID(as_uuid=True), ForeignKey("jurisdictions.id"))
-    status               = Column(String(30), nullable=False, default="active")
-    mode                 = Column(String(20), nullable=False, default="normal")
-    current_step_number  = Column(Integer, nullable=False, default=1)
-    total_steps          = Column(Integer, nullable=False)
-    started_at           = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    completed_at         = Column(DateTime(timezone=True))
-    blocked_reason       = Column(Text)
-    blocked_until        = Column(Date)
-    is_emergency         = Column(Boolean, nullable=False, default=False)
-    emergency_bypass_log = Column(JSONB, nullable=False, default=dict)
-    created_by           = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    created_at           = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updated_at           = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    id                  = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    infra_node_id       = Column(UUID(as_uuid=True), ForeignKey("infra_nodes.id"), nullable=False)
+    template_id         = Column(UUID(as_uuid=True), ForeignKey("workflow_templates.id"), nullable=False)
+    version_id          = Column(UUID(as_uuid=True), ForeignKey("workflow_template_versions.id"), nullable=False)
+    jurisdiction_id     = Column(UUID(as_uuid=True), ForeignKey("jurisdictions.id"))
+    status              = Column(String(30), nullable=False, default="active")
+    mode                = Column(String(20), nullable=False, default="normal")
+    current_step_number = Column(Integer, nullable=False, default=1)
+    total_steps         = Column(Integer, nullable=False)
+    started_at          = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    completed_at        = Column(DateTime(timezone=True))
+    blocked_reason      = Column(Text)
+    blocked_until       = Column(Date)
+    is_emergency        = Column(Boolean, nullable=False, default=False)
+    emergency_bypass_log= Column(JSONB, nullable=False, default=dict)
+    created_by          = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    created_at          = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at          = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class WorkflowStepInstance(Base):
     __tablename__ = "workflow_step_instances"
 
-    id                   = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    workflow_instance_id = Column(UUID(as_uuid=True), ForeignKey("workflow_instances.id", ondelete="CASCADE"), nullable=False)
-    template_step_id     = Column(UUID(as_uuid=True), ForeignKey("workflow_template_steps.id"), nullable=False)
-    step_number          = Column(Integer, nullable=False)
-    department_id        = Column(UUID(as_uuid=True), ForeignKey("departments.id"), nullable=False)
-    step_name            = Column(String(300), nullable=False)
-    status               = Column(String(30), nullable=False, default="pending")
-    assigned_official_id = Column(UUID(as_uuid=True), ForeignKey("users.id"))
-    unlocked_at          = Column(DateTime(timezone=True))
-    started_at           = Column(DateTime(timezone=True))
-    expected_completion_at = Column(DateTime(timezone=True))
-    completed_at         = Column(DateTime(timezone=True))
-    constraint_block_id  = Column(UUID(as_uuid=True), ForeignKey("workflow_constraints.id"))
-    legally_blocked_at   = Column(DateTime(timezone=True))
-    legally_blocked_until = Column(Date)
-    agent_summary        = Column(Text)
-    agent_priority       = Column(String(20))
-    created_at           = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
-    updated_at           = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    id                      = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    workflow_instance_id    = Column(UUID(as_uuid=True), ForeignKey("workflow_instances.id", ondelete="CASCADE"), nullable=False)
+    template_step_id        = Column(UUID(as_uuid=True), ForeignKey("workflow_template_steps.id"), nullable=False)
+    step_number             = Column(Integer, nullable=False)
+    department_id           = Column(UUID(as_uuid=True), ForeignKey("departments.id"), nullable=False)
+    step_name               = Column(String(300), nullable=False)
+    status                  = Column(String(30), nullable=False, default="pending")
+    assigned_official_id    = Column(UUID(as_uuid=True), ForeignKey("users.id"))
+    unlocked_at             = Column(DateTime(timezone=True))
+    started_at              = Column(DateTime(timezone=True))
+    expected_completion_at  = Column(DateTime(timezone=True))
+    completed_at            = Column(DateTime(timezone=True))
+    constraint_block_id     = Column(UUID(as_uuid=True), ForeignKey("workflow_constraints.id"))
+    legally_blocked_at      = Column(DateTime(timezone=True))
+    legally_blocked_until   = Column(Date)
+    agent_summary           = Column(Text)
+    agent_priority          = Column(String(20))
+    created_at              = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at              = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     __table_args__ = (UniqueConstraint("workflow_instance_id", "step_number"),)
 
@@ -618,6 +669,12 @@ class SurveyTemplate(Base):
 
 
 class SurveyInstance(Base):
+    """
+    Aligned with final.sql:
+      template_id(NN), target_user_id(NN), target_role(NN),
+      triggered_by, channel, status, expires_at
+    Note: city_id does NOT exist on this table in final.sql.
+    """
     __tablename__ = "survey_instances"
 
     id                   = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -640,6 +697,12 @@ class SurveyInstance(Base):
 
 
 class SurveyResponse(Base):
+    """
+    Aligned with final.sql:
+      answers(JSONB NN), overall_rating(numeric 1-5), feedback_text
+    No respondent_role, rating, is_resolved, wants_followup, response_data columns.
+    Those are encoded inside answers JSONB.
+    """
     __tablename__ = "survey_responses"
 
     id                 = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -672,6 +735,12 @@ class NotificationTemplate(Base):
 
 
 class NotificationLog(Base):
+    """
+    Aligned with final.sql notification_logs:
+      recipient_user_id(NN), recipient_contact(NN), channel(NN),
+      event_type(NN), complaint_id, task_id, survey_instance_id,
+      payload(JSONB), status
+    """
     __tablename__ = "notification_logs"
 
     id                  = Column(UUID(as_uuid=True), nullable=False, default=uuid.uuid4, primary_key=True)
@@ -822,21 +891,21 @@ class PublicAnnouncement(Base):
 class OfficialPerformanceSnapshot(Base):
     __tablename__ = "official_performance_snapshots"
 
-    id                       = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    official_id              = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
-    department_id            = Column(UUID(as_uuid=True), ForeignKey("departments.id"))
-    snapshot_date            = Column(Date, nullable=False)
-    tasks_assigned           = Column(Integer, nullable=False, default=0)
-    tasks_completed          = Column(Integer, nullable=False, default=0)
-    tasks_overdue            = Column(Integer, nullable=False, default=0)
-    avg_resolution_hours     = Column(Numeric(8, 2))
-    avg_survey_rating        = Column(Numeric(4, 2))
-    override_count           = Column(Integer, nullable=False, default=0)
+    id                        = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    official_id               = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
+    department_id             = Column(UUID(as_uuid=True), ForeignKey("departments.id"))
+    snapshot_date             = Column(Date, nullable=False)
+    tasks_assigned            = Column(Integer, nullable=False, default=0)
+    tasks_completed           = Column(Integer, nullable=False, default=0)
+    tasks_overdue             = Column(Integer, nullable=False, default=0)
+    avg_resolution_hours      = Column(Numeric(8, 2))
+    avg_survey_rating         = Column(Numeric(4, 2))
+    override_count            = Column(Integer, nullable=False, default=0)
     override_reason_breakdown = Column(JSONB, nullable=False, default=dict)
-    complaints_handled       = Column(Integer, nullable=False, default=0)
-    emergency_bypasses       = Column(Integer, nullable=False, default=0)
-    posthoc_tasks_pending    = Column(Integer, nullable=False, default=0)
-    created_at               = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    complaints_handled        = Column(Integer, nullable=False, default=0)
+    emergency_bypasses        = Column(Integer, nullable=False, default=0)
+    posthoc_tasks_pending     = Column(Integer, nullable=False, default=0)
+    created_at                = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     __table_args__ = (UniqueConstraint("official_id", "snapshot_date"),)
 
@@ -844,16 +913,16 @@ class OfficialPerformanceSnapshot(Base):
 class ContractorPerformanceSnapshot(Base):
     __tablename__ = "contractor_performance_snapshots"
 
-    id                  = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    contractor_id       = Column(UUID(as_uuid=True), ForeignKey("contractors.id"), nullable=False)
-    snapshot_date       = Column(Date, nullable=False)
-    tasks_completed     = Column(Integer, nullable=False, default=0)
-    tasks_overdue       = Column(Integer, nullable=False, default=0)
+    id                   = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    contractor_id        = Column(UUID(as_uuid=True), ForeignKey("contractors.id"), nullable=False)
+    snapshot_date        = Column(Date, nullable=False)
+    tasks_completed      = Column(Integer, nullable=False, default=0)
+    tasks_overdue        = Column(Integer, nullable=False, default=0)
     avg_completion_hours = Column(Numeric(8, 2))
-    avg_survey_rating   = Column(Numeric(4, 2))
-    tenders_won         = Column(Integer, nullable=False, default=0)
-    tenders_applied     = Column(Integer, nullable=False, default=0)
-    created_at          = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    avg_survey_rating    = Column(Numeric(4, 2))
+    tenders_won          = Column(Integer, nullable=False, default=0)
+    tenders_applied      = Column(Integer, nullable=False, default=0)
+    created_at           = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     __table_args__ = (UniqueConstraint("contractor_id", "snapshot_date"),)
 

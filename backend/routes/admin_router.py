@@ -1,242 +1,742 @@
 # backend/routes/admin_router.py
 """
-RBAC:
-  super_admin → sees everything city-wide
-  admin       → sees their department only
-  official    → sees their branch/jurisdiction only
+Role-based Admin API.
+Roles:
+  super_admin — city-wide head, sees everything
+  admin       — branch head, sees their jurisdiction
+  official    — complaint handler, assigns work
+
+All endpoints require Firebase auth + role check.
 """
-from typing import Optional
+import json
+import logging
+from typing import Any, Dict, List, Optional
 from uuid import UUID
 
+import vertexai
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from vertexai.generative_models import GenerationConfig, GenerativeModel
 
+from config import settings
 from db import get_db
 from dependencies import get_current_user
 from schemas import TokenData
+from services.notification_service import dispatch_notification
+from services.workflow_agent_service import (
+    create_workflow_from_approval,
+    suggest_workflows,
+)
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
+ADMIN_ROLES = {"official", "admin", "super_admin"}
+UPPER_ROLES = {"admin", "super_admin"}
 
-# ── RBAC helper ───────────────────────────────────────────────────
+_vertex_ok = False
 
-def require_role(*roles):
-    def dep(current_user: TokenData = Depends(get_current_user)):
-        if current_user.role not in roles:
-            raise HTTPException(
-                status_code=403,
-                detail=f"Requires one of: {roles}. You are: {current_user.role}"
+
+def _require(current_user: TokenData, roles: set):
+    if current_user.role not in roles:
+        raise HTTPException(status_code=403, detail="Insufficient role")
+
+
+def _ensure_vertex():
+    global _vertex_ok
+    if _vertex_ok:
+        return
+    vertexai.init(project=settings.GCS_PROJECT_ID, location=settings.VERTEX_AI_LOCATION)
+    _vertex_ok = True
+
+
+def _gemini_text(system: str, user: str, max_tokens: int = 1000) -> str:
+    _ensure_vertex()
+    model = GenerativeModel(
+        "gemini-2.0-flash-001",
+        system_instruction=system,
+        generation_config=GenerationConfig(temperature=0.3, max_output_tokens=max_tokens),
+    )
+    return (model.generate_content(user).text or "").strip()
+
+
+# ══════════════════════════════════════════════════════════════
+# 1. KPI DASHBOARD
+# ══════════════════════════════════════════════════════════════
+
+@router.get("/dashboard/kpi")
+def get_dashboard_kpi(
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    _require(current_user, ADMIN_ROLES)
+    uid = str(current_user.user_id)
+    params: Dict[str, Any] = {}
+    juri_filter = ""
+    dept_filter = ""
+
+    if current_user.role == "official":
+        u = db.execute(
+            text("SELECT department_id, jurisdiction_id FROM users WHERE id = CAST(:uid AS uuid)"),
+            {"uid": uid},
+        ).mappings().first()
+        if u and u["department_id"]:
+            dept_filter = (
+                "AND EXISTS (SELECT 1 FROM tasks _t WHERE _t.complaint_id = c.id "
+                "AND _t.department_id = CAST(:dept_id AS uuid) AND _t.is_deleted=FALSE)"
             )
-        return current_user
-    return dep
+            params["dept_id"] = str(u["department_id"])
+    elif current_user.role == "admin":
+        u = db.execute(
+            text("SELECT jurisdiction_id FROM users WHERE id = CAST(:uid AS uuid)"),
+            {"uid": uid},
+        ).mappings().first()
+        if u and u["jurisdiction_id"]:
+            juri_filter = "AND c.jurisdiction_id = CAST(:juri_id AS uuid)"
+            params["juri_id"] = str(u["jurisdiction_id"])
 
-
-def _get_user_context(db: Session, user_id) -> dict:
-    """Returns dept_id, branch_id, jurisdiction_id for scoping queries."""
-    row = db.execute(
-        text("""
-            SELECT department_id, branch_id, jurisdiction_id, city_id, role
-            FROM users WHERE id = CAST(:id AS uuid)
+    cc = db.execute(
+        text(f"""
+            SELECT
+                COUNT(*)                                                        AS total,
+                COUNT(*) FILTER (WHERE c.status = 'received')                  AS received,
+                COUNT(*) FILTER (WHERE c.status = 'dept_mapped')               AS dept_mapped,
+                COUNT(*) FILTER (WHERE c.status = 'workflow_started')           AS workflow_started,
+                COUNT(*) FILTER (WHERE c.status = 'in_progress')               AS in_progress,
+                COUNT(*) FILTER (WHERE c.status = 'resolved')                  AS resolved,
+                COUNT(*) FILTER (WHERE c.status = 'rejected')                  AS rejected,
+                COUNT(*) FILTER (WHERE c.priority IN ('critical','emergency'))  AS urgent,
+                COUNT(*) FILTER (WHERE c.is_repeat_complaint = TRUE)            AS repeat_complaints,
+                COUNT(*) FILTER (WHERE c.created_at >= NOW() - INTERVAL '24 hours') AS today,
+                COUNT(*) FILTER (WHERE c.created_at >= NOW() - INTERVAL '7 days')   AS this_week,
+                COUNT(*) FILTER (WHERE c.workflow_instance_id IS NULL
+                                   AND c.status NOT IN ('resolved','rejected','closed')) AS needs_workflow
+            FROM complaints c
+            WHERE c.is_deleted = FALSE {juri_filter} {dept_filter}
         """),
-        {"id": str(user_id)}
+        params,
     ).mappings().first()
-    if not row:
-        raise HTTPException(status_code=404, detail="User not found")
-    return dict(row)
+
+    sla = db.execute(
+        text(f"""
+            SELECT
+                COUNT(*) FILTER (WHERE NOW() - c.created_at > INTERVAL '35 days')   AS critical_sla,
+                COUNT(*) FILTER (WHERE NOW() - c.created_at BETWEEN INTERVAL '25 days' AND INTERVAL '35 days') AS warning_sla,
+                COUNT(*) FILTER (WHERE c.status = 'resolved'
+                                   AND c.resolved_at - c.created_at > INTERVAL '41 days') AS breached
+            FROM complaints c
+            WHERE c.is_deleted = FALSE
+              AND c.status NOT IN ('resolved','rejected','closed')
+              {juri_filter} {dept_filter}
+        """),
+        params,
+    ).mappings().first()
+
+    task_filter = ""
+    task_params: Dict[str, Any] = {}
+    if current_user.role == "official":
+        task_filter = "AND t.assigned_official_id = CAST(:uid AS uuid)"
+        task_params["uid"] = uid
+    elif current_user.role == "admin" and params.get("juri_id"):
+        task_filter = "AND t.jurisdiction_id = CAST(:juri_id AS uuid)"
+        task_params["juri_id"] = params["juri_id"]
+
+    tc = db.execute(
+        text(f"""
+            SELECT
+                COUNT(*)                                                              AS total,
+                COUNT(*) FILTER (WHERE t.status = 'pending')                         AS pending,
+                COUNT(*) FILTER (WHERE t.status IN ('accepted','in_progress'))        AS active,
+                COUNT(*) FILTER (WHERE t.status = 'completed')                       AS completed,
+                COUNT(*) FILTER (WHERE t.due_at < NOW()
+                                   AND t.status NOT IN ('completed','cancelled'))     AS overdue
+            FROM tasks t
+            WHERE t.is_deleted = FALSE {task_filter}
+        """),
+        task_params,
+    ).mappings().first()
+
+    survey_alerts = db.execute(
+        text("""
+            SELECT COUNT(*) FROM survey_responses
+            WHERE overall_rating < 3
+              AND submitted_at >= NOW() - INTERVAL '7 days'
+        """),
+    ).scalar() or 0
+
+    dept_breakdown = []
+    if current_user.role == "super_admin":
+        rows = db.execute(
+            text("""
+                SELECT d.name AS dept_name, d.code AS dept_code,
+                       COUNT(DISTINCT t.complaint_id) AS complaints,
+                       COUNT(t.id) FILTER (WHERE t.status = 'completed') AS tasks_done,
+                       COUNT(t.id) FILTER (WHERE t.due_at < NOW()
+                           AND t.status NOT IN ('completed','cancelled')) AS overdue
+                FROM departments d
+                LEFT JOIN tasks t ON t.department_id = d.id AND t.is_deleted = FALSE
+                GROUP BY d.id, d.name, d.code ORDER BY complaints DESC LIMIT 15
+            """),
+        ).mappings().all()
+        dept_breakdown = [dict(r) for r in rows]
+
+    return {
+        "complaints":     dict(cc),
+        "sla_risk":       dict(sla),
+        "tasks":          dict(tc),
+        "survey_alerts":  int(survey_alerts),
+        "dept_breakdown": dept_breakdown,
+        "role":           current_user.role,
+    }
 
 
-# ── COMPLAINT QUEUE — scoped by role ─────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# 2. DAILY BRIEFING
+# ══════════════════════════════════════════════════════════════
+
+@router.get("/crm/briefing")
+def get_daily_briefing(
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    _require(current_user, ADMIN_ROLES)
+    uid = str(current_user.user_id)
+
+    stats = db.execute(
+        text("""
+            SELECT COUNT(*)                                                AS total_open,
+                   COUNT(*) FILTER (WHERE priority IN ('critical','emergency')) AS urgent,
+                   COUNT(*) FILTER (WHERE status = 'received')            AS needs_workflow,
+                   COUNT(*) FILTER (WHERE created_at >= NOW() - INTERVAL '24 hours') AS new_today
+            FROM complaints
+            WHERE is_deleted = FALSE AND status NOT IN ('resolved','rejected','closed')
+        """),
+    ).mappings().first()
+
+    overdue = db.execute(
+        text("SELECT COUNT(*) FROM tasks WHERE is_deleted=FALSE AND due_at<NOW() AND status NOT IN ('completed','cancelled')"),
+    ).scalar() or 0
+
+    poor = db.execute(
+        text("SELECT COUNT(*) FROM survey_responses WHERE overall_rating<3 AND submitted_at>=NOW()-INTERVAL '7 days'"),
+    ).scalar() or 0
+
+    stuck = db.execute(
+        text("SELECT COUNT(*) FROM complaints WHERE is_deleted=FALSE AND status NOT IN ('resolved','rejected','closed') AND updated_at<NOW()-INTERVAL '72 hours'"),
+    ).scalar() or 0
+
+    user_row = db.execute(
+        text("SELECT full_name FROM users WHERE id = CAST(:uid AS uuid)"), {"uid": uid}
+    ).mappings().first()
+    name = (user_row["full_name"] if user_row else "Official") or "Official"
+
+    ctx = (
+        f"Open complaints: {stats['total_open']} ({stats['urgent']} urgent). "
+        f"Needs workflow: {stats['needs_workflow']}. New today: {stats['new_today']}. "
+        f"Overdue tasks: {overdue}. Poor surveys (7d): {poor}. Stalled >72h: {stuck}."
+    )
+
+    try:
+        narrative = _gemini_text(
+            system=(
+                "You are the PS-CRM assistant for Delhi. Give a concise 3-4 sentence "
+                "morning briefing. Be direct. Highlight urgent items. End with one action."
+            ),
+            user=f"Morning briefing for {name} ({current_user.role}). {ctx}",
+            max_tokens=300,
+        )
+    except Exception as exc:
+        logger.error("Briefing Gemini failed: %s", exc)
+        narrative = (
+            f"Good morning, {name}. {stats['total_open']} open complaints, "
+            f"{stats['urgent']} urgent, {overdue} overdue tasks. "
+            f"{stats['needs_workflow']} complaints need workflow assignment."
+        )
+
+    return {
+        "narrative":     narrative,
+        "stats":         dict(stats) | {"overdue_tasks": overdue, "poor_surveys": poor},
+        "stalled_count": int(stuck),
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# 3. CRM AGENT CHAT
+# ══════════════════════════════════════════════════════════════
+
+class ChatRequest(BaseModel):
+    message: str
+    history: List[Dict[str, str]] = []
+
+
+@router.post("/crm/chat")
+def crm_chat(
+    body: ChatRequest,
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    _require(current_user, ADMIN_ROLES)
+    msg = body.message.lower()
+    db_context = ""
+
+    if any(k in msg for k in ["critical", "urgent", "emergency"]):
+        rows = db.execute(text("""
+            SELECT complaint_number, title, status, priority,
+                   EXTRACT(EPOCH FROM (NOW()-created_at))/3600 AS age_hours
+            FROM complaints WHERE priority IN ('critical','emergency')
+              AND status NOT IN ('resolved','rejected','closed') AND is_deleted=FALSE
+            ORDER BY created_at ASC LIMIT 10
+        """)).mappings().all()
+        db_context = "CRITICAL COMPLAINTS:\n" + "\n".join(
+            f"  [{r['complaint_number']}] {r['title']} | {r['status']} | {r['age_hours']:.0f}h old" for r in rows)
+
+    elif any(k in msg for k in ["repeat", "recurring"]):
+        rows = db.execute(text("""
+            SELECT complaint_number, title, status, repeat_gap_days, address_text
+            FROM complaints WHERE is_repeat_complaint=TRUE AND is_deleted=FALSE
+            ORDER BY created_at DESC LIMIT 10
+        """)).mappings().all()
+        db_context = "REPEAT COMPLAINTS:\n" + "\n".join(
+            f"  [{r['complaint_number']}] {r['title']} | gap={r['repeat_gap_days']}d | {r['address_text']}" for r in rows)
+
+    elif any(k in msg for k in ["stuck", "stalled", "overdue", "delayed"]):
+        rows = db.execute(text("""
+            SELECT complaint_number, title, status,
+                   EXTRACT(DAY FROM NOW()-updated_at) AS days_stalled
+            FROM complaints WHERE is_deleted=FALSE
+              AND status NOT IN ('resolved','rejected','closed')
+              AND updated_at<NOW()-INTERVAL '48 hours'
+            ORDER BY updated_at ASC LIMIT 10
+        """)).mappings().all()
+        db_context = "STALLED COMPLAINTS:\n" + "\n".join(
+            f"  [{r['complaint_number']}] {r['title']} | {r['status']} | {r['days_stalled']:.0f}d" for r in rows)
+
+    elif any(k in msg for k in ["contractor", "performance", "worker"]):
+        rows = db.execute(text("""
+            SELECT c.company_name, c.performance_score, c.is_blacklisted,
+                   COUNT(t.id) AS tasks, COUNT(t.id) FILTER(WHERE t.status='completed') AS done
+            FROM contractors c
+            LEFT JOIN tasks t ON t.assigned_contractor_id=c.id AND t.is_deleted=FALSE
+            GROUP BY c.id, c.company_name, c.performance_score, c.is_blacklisted
+            ORDER BY c.performance_score ASC LIMIT 10
+        """)).mappings().all()
+        db_context = "CONTRACTOR PERFORMANCE:\n" + "\n".join(
+            f"  {r['company_name']} | score={r['performance_score']} | tasks={r['tasks']} done={r['done']} blacklisted={r['is_blacklisted']}" for r in rows)
+
+    elif any(k in msg for k in ["sla", "breach", "deadline"]):
+        rows = db.execute(text("""
+            SELECT complaint_number, title, EXTRACT(DAY FROM NOW()-created_at) AS age_days, priority
+            FROM complaints WHERE is_deleted=FALSE
+              AND status NOT IN ('resolved','rejected','closed')
+              AND NOW()-created_at>INTERVAL '25 days'
+            ORDER BY created_at ASC LIMIT 10
+        """)).mappings().all()
+        db_context = "SLA RISK (>25d open, limit=41d):\n" + "\n".join(
+            f"  [{r['complaint_number']}] {r['title']} | {r['age_days']:.0f}d | {r['priority']}" for r in rows)
+
+    elif any(k in msg for k in ["survey", "rating", "feedback"]):
+        row = db.execute(text("""
+            SELECT AVG(overall_rating) AS avg, COUNT(*) AS total,
+                   COUNT(*) FILTER(WHERE overall_rating<3) AS poor
+            FROM survey_responses WHERE submitted_at>=NOW()-INTERVAL '30 days'
+        """)).mappings().first()
+        db_context = f"SURVEY STATS (30d): avg={float(row['avg'] or 0):.1f} total={row['total']} poor={row['poor']}"
+
+    elif any(k in msg for k in ["multi", "multiple department", "coordination"]):
+        rows = db.execute(text("""
+            SELECT c.complaint_number, c.title, c.status, COUNT(DISTINCT t.department_id) AS depts
+            FROM complaints c JOIN tasks t ON t.complaint_id=c.id AND t.is_deleted=FALSE
+            WHERE c.is_deleted=FALSE AND c.status NOT IN ('resolved','rejected','closed')
+            GROUP BY c.id, c.complaint_number, c.title, c.status
+            HAVING COUNT(DISTINCT t.department_id)>1 ORDER BY depts DESC LIMIT 8
+        """)).mappings().all()
+        db_context = "MULTI-DEPT COMPLAINTS:\n" + "\n".join(
+            f"  [{r['complaint_number']}] {r['title']} | {r['depts']} depts | {r['status']}" for r in rows)
+
+    history_text = "\n".join(
+        f"{'Official' if m.get('role')=='user' else 'Agent'}: {m.get('content','')}"
+        for m in body.history[-6:]
+    )
+
+    prompt = ""
+    if db_context:
+        prompt += f"[Live PS-CRM data]\n{db_context}\n\n"
+    if history_text:
+        prompt += f"[Recent conversation]\n{history_text}\n\n"
+    prompt += f"Official asks: {body.message}"
+
+    try:
+        reply = _gemini_text(
+            system=(
+                "You are the PS-CRM field assistant for Delhi municipal services. "
+                "Help officials understand complaint status, tasks, SLA risks. "
+                "Be concise and action-oriented. 2-5 sentences max unless a list is clearer."
+            ),
+            user=prompt,
+            max_tokens=500,
+        )
+    except Exception as exc:
+        logger.error("CRM chat Gemini failed: %s", exc)
+        reply = "I couldn't process that right now. Please try again."
+
+    return {"reply": reply, "has_db_context": bool(db_context)}
+
+
+# ══════════════════════════════════════════════════════════════
+# 4. COMPLAINT QUEUE
+# ══════════════════════════════════════════════════════════════
 
 @router.get("/complaints/queue")
 def get_complaint_queue(
-    status: Optional[str] = Query(default=None),
-    priority: Optional[str] = Query(default=None),
-    infra_type_code: Optional[str] = Query(default=None),
-    limit: int = Query(default=50, le=200),
-    offset: int = Query(default=0),
+    status:          Optional[str]  = Query(default=None),
+    priority:        Optional[str]  = Query(default=None),
+    infra_type_code: Optional[str]  = Query(default=None),
+    needs_workflow:  Optional[bool] = Query(default=None),
+    limit:  int = Query(default=50, le=200),
+    offset: int = Query(default=0,  ge=0),
     db: Session = Depends(get_db),
-    current_user: TokenData = Depends(
-        require_role("super_admin", "admin", "official")
-    ),
+    current_user: TokenData = Depends(get_current_user),
 ):
-    """
-    Returns complaints scoped by role:
-    - super_admin: all complaints in city
-    - admin: all complaints for their department
-    - official: complaints in their branch jurisdiction
-    """
-    ctx = _get_user_context(db, current_user.user_id)
-
+    _require(current_user, ADMIN_ROLES)
+    uid = str(current_user.user_id)
+    params: Dict[str, Any] = {"limit": limit, "offset": offset}
     filters = ["c.is_deleted = FALSE"]
-    params  = {"limit": limit, "offset": offset, "city_id": str(ctx["city_id"])}
 
-    filters.append("c.city_id = CAST(:city_id AS uuid)")
-
-    if ctx["role"] == "admin" and ctx["department_id"]:
-        filters.append("""
-            EXISTS (
-                SELECT 1 FROM unnest(c.agent_suggested_dept_ids) d(id)
-                WHERE d.id = CAST(:dept_id AS uuid)
-            )
-        """)
-        params["dept_id"] = str(ctx["department_id"])
-
-    elif ctx["role"] == "official" and ctx["jurisdiction_id"]:
-        filters.append("c.jurisdiction_id = CAST(:jur_id AS uuid)")
-        params["jur_id"] = str(ctx["jurisdiction_id"])
+    if current_user.role == "official":
+        u = db.execute(
+            text("SELECT jurisdiction_id FROM users WHERE id = CAST(:uid AS uuid)"), {"uid": uid}
+        ).mappings().first()
+        if u and u["jurisdiction_id"]:
+            filters.append("c.jurisdiction_id = CAST(:juri_id AS uuid)")
+            params["juri_id"] = str(u["jurisdiction_id"])
+    elif current_user.role == "admin":
+        u = db.execute(
+            text("SELECT jurisdiction_id FROM users WHERE id = CAST(:uid AS uuid)"), {"uid": uid}
+        ).mappings().first()
+        if u and u["jurisdiction_id"]:
+            filters.append("c.jurisdiction_id = CAST(:juri_id AS uuid)")
+            params["juri_id"] = str(u["jurisdiction_id"])
 
     if status:
-        filters.append("c.status = :status")
-        params["status"] = status
+        filters.append("c.status = :status"); params["status"] = status
     if priority:
-        filters.append("c.priority = :priority")
-        params["priority"] = priority
+        filters.append("c.priority = :priority"); params["priority"] = priority
     if infra_type_code:
-        filters.append("it.code = :infra_code")
-        params["infra_code"] = infra_type_code
+        filters.append("it.code = :itc"); params["itc"] = infra_type_code
+    if needs_workflow is True:
+        filters.append("c.workflow_instance_id IS NULL AND c.status NOT IN ('resolved','rejected','closed')")
+    elif needs_workflow is False:
+        filters.append("c.workflow_instance_id IS NOT NULL")
 
     where = " AND ".join(filters)
 
     rows = db.execute(
         text(f"""
-            SELECT
-                c.id, c.complaint_number, c.title, c.description,
-                c.status, c.priority,
-                c.is_repeat_complaint, c.repeat_gap_days,
-                c.agent_suggested_dept_ids,
-                c.agent_summary, c.agent_priority_reason,
-                c.created_at, c.updated_at,
-                c.infra_node_id, c.workflow_instance_id,
-                ST_Y(c.location::geometry) AS lat,
-                ST_X(c.location::geometry) AS lng,
-                c.address_text,
-                c.images,
-                it.name   AS infra_type_name,
-                it.code   AS infra_type_code,
-                j.name    AS jurisdiction_name,
-                -- mapping confidence from latest agent log
-                al.confidence_score AS mapping_confidence,
-                al.output_data      AS mapping_data,
-                -- infra node health
-                n.total_complaint_count,
-                n.total_resolved_count,
-                n.status AS node_status,
-                -- citizen (anonymised for officials — only first name + area)
-                u.full_name AS citizen_name,
-                u.preferred_language
+            SELECT c.id, c.complaint_number, c.title, c.description,
+                   c.status, c.priority, c.is_repeat_complaint, c.is_emergency,
+                   c.address_text,
+                   ST_Y(c.location::geometry) AS lat,
+                   ST_X(c.location::geometry) AS lng,
+                   c.created_at, c.updated_at, c.resolved_at,
+                   EXTRACT(DAY FROM NOW()-c.created_at) AS age_days,
+                   c.workflow_instance_id, c.agent_summary, c.agent_priority_reason,
+                   it.name AS infra_type_name, it.code AS infra_type_code,
+                   u.full_name AS citizen_name, u.phone AS citizen_phone
             FROM complaints c
-            LEFT JOIN infra_nodes   n  ON n.id  = c.infra_node_id
-            LEFT JOIN infra_types   it ON it.id = n.infra_type_id
-            LEFT JOIN jurisdictions j  ON j.id  = c.jurisdiction_id
-            LEFT JOIN users         u  ON u.id  = c.citizen_id
-            LEFT JOIN LATERAL (
-                SELECT confidence_score, output_data
-                FROM agent_logs
-                WHERE complaint_id = c.id AND agent_type = 'DEPT_MAPPER'
-                ORDER BY created_at DESC LIMIT 1
-            ) al ON TRUE
+            LEFT JOIN infra_nodes n  ON n.id  = c.infra_node_id
+            LEFT JOIN infra_types it ON it.id = n.infra_type_id
+            LEFT JOIN users u        ON u.id  = c.citizen_id
             WHERE {where}
             ORDER BY
-                CASE c.priority
-                    WHEN 'emergency' THEN 1
-                    WHEN 'critical'  THEN 2
-                    WHEN 'high'      THEN 3
-                    WHEN 'normal'    THEN 4
-                    WHEN 'low'       THEN 5
-                END,
-                c.is_repeat_complaint DESC,
-                c.created_at DESC
+                CASE c.priority WHEN 'emergency' THEN 1 WHEN 'critical' THEN 2
+                    WHEN 'high' THEN 3 WHEN 'normal' THEN 4 WHEN 'low' THEN 5 ELSE 6 END,
+                CASE WHEN c.is_repeat_complaint THEN 0 ELSE 1 END,
+                c.created_at ASC
             LIMIT :limit OFFSET :offset
         """),
         params,
     ).mappings().all()
 
-    count = db.execute(
-        text(f"SELECT COUNT(*) FROM complaints c LEFT JOIN infra_nodes n ON n.id=c.infra_node_id LEFT JOIN infra_types it ON it.id=n.infra_type_id WHERE {where}"),
-        params
-    ).scalar()
+    total = db.execute(
+        text(f"""
+            SELECT COUNT(c.id) FROM complaints c
+            LEFT JOIN infra_nodes n  ON n.id  = c.infra_node_id
+            LEFT JOIN infra_types it ON it.id = n.infra_type_id
+            WHERE {where}
+        """),
+        params,
+    ).scalar() or 0
 
-    def safe_url(images):
-        if images and isinstance(images, list) and images[0]:
-            return images[0].get("url")
-        return None
+    def _fmt(r):
+        d = dict(r)
+        d["id"]       = str(r["id"])
+        d["lat"]      = float(r["lat"]) if r["lat"] else None
+        d["lng"]      = float(r["lng"]) if r["lng"] else None
+        d["age_days"] = float(r["age_days"] or 0)
+        d["workflow_instance_id"] = str(r["workflow_instance_id"]) if r["workflow_instance_id"] else None
+        for ts in ("created_at", "updated_at", "resolved_at"):
+            d[ts] = r[ts].isoformat() if r[ts] else None
+        return d
 
-    return {
-        "total":  count,
-        "limit":  limit,
-        "offset": offset,
-        "items": [
-            {
-                "id":                   str(r["id"]),
-                "complaint_number":     r["complaint_number"],
-                "title":                r["title"],
-                "description":          r["description"],
-                "status":               r["status"],
-                "priority":             r["priority"],
-                "is_repeat_complaint":  bool(r["is_repeat_complaint"]),
-                "repeat_gap_days":      r["repeat_gap_days"],
-                "agent_suggested_dept_ids": [str(d) for d in (r["agent_suggested_dept_ids"] or [])],
-                "agent_summary":        r["agent_summary"],
-                "agent_priority_reason":r["agent_priority_reason"],
-                "mapping_confidence":   float(r["mapping_confidence"]) if r["mapping_confidence"] else None,
-                "mapping_data":         r["mapping_data"],
-                "infra_type_name":      r["infra_type_name"],
-                "infra_type_code":      r["infra_type_code"],
-                "jurisdiction_name":    r["jurisdiction_name"],
-                "lat":                  float(r["lat"]) if r["lat"] else None,
-                "lng":                  float(r["lng"]) if r["lng"] else None,
-                "address_text":         r["address_text"],
-                "thumbnail_url":        safe_url(r["images"]),
-                "node_total_complaints":r["total_complaint_count"],
-                "node_resolved_count":  r["total_resolved_count"],
-                "node_status":          r["node_status"],
-                "citizen_name":         r["citizen_name"],
-                "preferred_language":   r["preferred_language"],
-                "created_at":           r["created_at"].isoformat() if r["created_at"] else None,
-                "updated_at":           r["updated_at"].isoformat() if r["updated_at"] else None,
-                "workflow_instance_id": str(r["workflow_instance_id"]) if r["workflow_instance_id"] else None,
-            }
-            for r in rows
-        ],
-    }
+    return {"total": int(total), "limit": limit, "offset": offset, "items": [_fmt(r) for r in rows]}
 
 
-# ── INFRA NODE DETAIL — all complaints on one node ────────────────
+# ══════════════════════════════════════════════════════════════
+# 5. SINGLE COMPLAINT (admin detail)
+# ══════════════════════════════════════════════════════════════
+
+@router.get("/complaints/{complaint_id}")
+def get_complaint_admin(
+    complaint_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    _require(current_user, ADMIN_ROLES)
+
+    row = db.execute(
+        text("""
+            SELECT c.id, c.complaint_number, c.title, c.description,
+                   c.status, c.priority, c.address_text,
+                   c.is_repeat_complaint, c.repeat_gap_days, c.is_emergency,
+                   c.agent_summary, c.agent_priority_reason, c.agent_suggested_dept_ids,
+                   ST_Y(c.location::geometry) AS lat, ST_X(c.location::geometry) AS lng,
+                   c.images, c.voice_transcript,
+                   c.created_at, c.updated_at, c.resolved_at,
+                   c.workflow_instance_id, c.infra_node_id,
+                   u.full_name AS citizen_name, u.phone AS citizen_phone, u.email AS citizen_email,
+                   it.name AS infra_type_name, it.code AS infra_type_code,
+                   n.total_complaint_count AS node_total_complaints,
+                   n.last_resolved_at AS node_last_resolved
+            FROM complaints c
+            LEFT JOIN infra_nodes n  ON n.id  = c.infra_node_id
+            LEFT JOIN infra_types it ON it.id = n.infra_type_id
+            LEFT JOIN users u        ON u.id  = c.citizen_id
+            WHERE c.id = CAST(:cid AS uuid) AND c.is_deleted = FALSE
+        """),
+        {"cid": str(complaint_id)},
+    ).mappings().first()
+
+    if not row:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+
+    history = db.execute(
+        text("""
+            SELECT csh.old_status, csh.new_status, csh.reason, csh.created_at,
+                   u.full_name AS changed_by_name
+            FROM complaint_status_history csh
+            LEFT JOIN users u ON u.id = csh.changed_by
+            WHERE csh.complaint_id = CAST(:cid AS uuid) ORDER BY csh.created_at ASC
+        """),
+        {"cid": str(complaint_id)},
+    ).mappings().all()
+
+    tasks = db.execute(
+        text("""
+            SELECT t.id, t.task_number, t.title, t.status, t.priority,
+                   t.due_at, t.completed_at, d.name AS dept_name,
+                   COALESCE(wu.full_name, cu.full_name) AS assignee_name
+            FROM tasks t JOIN departments d ON d.id = t.department_id
+            LEFT JOIN workers w  ON w.id = t.assigned_worker_id
+            LEFT JOIN users wu   ON wu.id = w.user_id
+            LEFT JOIN contractors ct ON ct.id = t.assigned_contractor_id
+            LEFT JOIN users cu   ON cu.id = ct.user_id
+            WHERE t.complaint_id = CAST(:cid AS uuid) AND t.is_deleted = FALSE
+            ORDER BY t.created_at ASC
+        """),
+        {"cid": str(complaint_id)},
+    ).mappings().all()
+
+    d = dict(row)
+    d["id"]       = str(row["id"])
+    d["lat"]      = float(row["lat"]) if row["lat"] else None
+    d["lng"]      = float(row["lng"]) if row["lng"] else None
+    d["workflow_instance_id"] = str(row["workflow_instance_id"]) if row["workflow_instance_id"] else None
+    for ts in ("created_at", "updated_at", "resolved_at"):
+        d[ts] = row[ts].isoformat() if row[ts] else None
+    d["history"] = [dict(h) | {"created_at": h["created_at"].isoformat()} for h in history]
+    d["tasks"]   = [
+        dict(t) | {
+            "id": str(t["id"]),
+            "due_at":       t["due_at"].isoformat() if t["due_at"] else None,
+            "completed_at": t["completed_at"].isoformat() if t["completed_at"] else None,
+        }
+        for t in tasks
+    ]
+    return d
+
+
+# ══════════════════════════════════════════════════════════════
+# 6. WORKFLOW SUGGESTIONS
+# ══════════════════════════════════════════════════════════════
+
+@router.get("/complaints/{complaint_id}/workflow-suggestions")
+def get_workflow_suggestions(
+    complaint_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    _require(current_user, ADMIN_ROLES)
+
+    c = db.execute(
+        text("""
+            SELECT c.id, c.city_id, c.agent_summary, c.title, c.description,
+                   c.priority, c.is_repeat_complaint, it.code AS infra_code
+            FROM complaints c
+            LEFT JOIN infra_nodes n  ON n.id  = c.infra_node_id
+            LEFT JOIN infra_types it ON it.id = n.infra_type_id
+            WHERE c.id = CAST(:cid AS uuid) AND c.is_deleted = FALSE
+        """),
+        {"cid": str(complaint_id)},
+    ).mappings().first()
+
+    if not c:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+
+    summary = c["agent_summary"] or f"{c['title']}. {c['description']}"
+    suggestions = suggest_workflows(
+        db,
+        complaint_id      = str(complaint_id),
+        city_id           = str(c["city_id"]),
+        infra_type_code   = c["infra_code"] or "unknown",
+        complaint_summary = summary,
+        priority          = c["priority"],
+        is_repeat         = bool(c["is_repeat_complaint"]),
+    )
+
+    return {"complaint_id": str(complaint_id), "suggestions": suggestions}
+
+
+# ══════════════════════════════════════════════════════════════
+# 7. APPROVE WORKFLOW
+# ══════════════════════════════════════════════════════════════
+
+class WorkflowApproveRequest(BaseModel):
+    template_id:  str
+    edited_steps: Optional[List[Dict[str, Any]]] = None
+    edit_reason:  Optional[str]                  = None
+
+
+@router.post("/complaints/{complaint_id}/workflow-approve")
+def approve_workflow(
+    complaint_id: UUID,
+    body: WorkflowApproveRequest,
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    _require(current_user, ADMIN_ROLES)
+
+    c = db.execute(
+        text("SELECT city_id, citizen_id, complaint_number FROM complaints WHERE id = CAST(:cid AS uuid) AND is_deleted=FALSE"),
+        {"cid": str(complaint_id)},
+    ).mappings().first()
+
+    if not c:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+
+    try:
+        result = create_workflow_from_approval(
+            db,
+            complaint_id = str(complaint_id),
+            template_id  = body.template_id,
+            official_id  = str(current_user.user_id),
+            city_id      = str(c["city_id"]),
+            edited_steps = body.edited_steps,
+            edit_reason  = body.edit_reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    dispatch_notification(
+        db,
+        user_id    = str(c["citizen_id"]),
+        event_type = "WORKFLOW_STARTED",
+        variables  = {"number": c["complaint_number"], "eta": "TBD"},
+        data       = {"complaint_id": str(complaint_id)},
+    )
+
+    return result
+
+
+# ══════════════════════════════════════════════════════════════
+# 8. REROUTE COMPLAINT
+# ══════════════════════════════════════════════════════════════
+
+class RerouteRequest(BaseModel):
+    new_dept_ids: List[str]
+    reason: str
+
+
+@router.post("/complaints/{complaint_id}/reroute")
+def reroute_complaint(
+    complaint_id: UUID,
+    body: RerouteRequest,
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    _require(current_user, ADMIN_ROLES)
+
+    if not body.reason or len(body.reason.strip()) < 10:
+        raise HTTPException(status_code=400, detail="Reason must be at least 10 characters")
+
+    c = db.execute(
+        text("SELECT id FROM complaints WHERE id = CAST(:cid AS uuid) AND is_deleted=FALSE"),
+        {"cid": str(complaint_id)},
+    ).mappings().first()
+
+    if not c:
+        raise HTTPException(status_code=404, detail="Complaint not found")
+
+    db.execute(
+        text("""
+            UPDATE complaints
+               SET agent_suggested_dept_ids = CAST(:dids AS uuid[]),
+                   status = 'dept_mapped', updated_at = NOW()
+             WHERE id = CAST(:cid AS uuid)
+        """),
+        {"cid": str(complaint_id), "dids": [str(d) for d in body.new_dept_ids]},
+    )
+    db.execute(
+        text("""
+            INSERT INTO domain_events (event_type, entity_type, entity_id, actor_id, actor_type, payload, complaint_id)
+            VALUES ('COMPLAINT_REROUTED','complaint',CAST(:cid AS uuid),CAST(:uid AS uuid),'official',CAST(:p AS jsonb),CAST(:cid AS uuid))
+        """),
+        {
+            "cid": str(complaint_id), "uid": str(current_user.user_id),
+            "p": json.dumps({"new_dept_ids": body.new_dept_ids, "reason": body.reason}),
+        },
+    )
+    db.commit()
+    return {"status": "rerouted", "new_dept_ids": body.new_dept_ids}
+
+
+# ══════════════════════════════════════════════════════════════
+# 9. INFRA NODE SUMMARY
+# ══════════════════════════════════════════════════════════════
 
 @router.get("/infra-nodes/{node_id}/summary")
 def get_infra_node_summary(
     node_id: UUID,
     db: Session = Depends(get_db),
-    current_user: TokenData = Depends(
-        require_role("super_admin", "admin", "official")
-    ),
+    current_user: TokenData = Depends(get_current_user),
 ):
-    """
-    Full picture of one infra node:
-    - node metadata
-    - all complaints ever (with status timeline)
-    - AI summary of the issues
-    - workflow recommendation
-    - asset health trend
-    """
+    _require(current_user, ADMIN_ROLES)
+
     node = db.execute(
         text("""
-            SELECT
-                n.id, n.name, n.status, n.location_hash,
-                n.total_complaint_count, n.total_resolved_count,
-                n.last_resolved_at,
-                ST_Y(n.location::geometry) AS lat,
-                ST_X(n.location::geometry) AS lng,
-                it.name AS infra_type_name, it.code AS infra_type_code,
-                it.cluster_radius_meters, it.repeat_alert_years,
-                j.name AS jurisdiction_name
+            SELECT n.id, n.name, n.status, n.total_complaint_count, n.total_resolved_count,
+                   n.last_resolved_at,
+                   it.name AS infra_type_name, it.code AS infra_type_code,
+                   it.repeat_alert_years,
+                   ST_Y(n.location::geometry) AS lat, ST_X(n.location::geometry) AS lng,
+                   j.name AS jurisdiction_name
             FROM infra_nodes n
-            JOIN infra_types   it ON it.id = n.infra_type_id
+            JOIN infra_types it  ON it.id = n.infra_type_id
             LEFT JOIN jurisdictions j ON j.id = n.jurisdiction_id
             WHERE n.id = CAST(:nid AS uuid) AND n.is_deleted = FALSE
         """),
-        {"nid": str(node_id)}
+        {"nid": str(node_id)},
     ).mappings().first()
 
     if not node:
@@ -244,403 +744,274 @@ def get_infra_node_summary(
 
     complaints = db.execute(
         text("""
-            SELECT
-                c.id, c.complaint_number, c.title, c.status,
-                c.priority, c.is_repeat_complaint, c.agent_summary,
-                c.created_at, c.resolved_at,
-                u.full_name AS citizen_name
+            SELECT c.id, c.complaint_number, c.title, c.status, c.priority,
+                   c.created_at, c.resolved_at, c.is_repeat_complaint, c.agent_summary
             FROM complaints c
-            JOIN users u ON u.id = c.citizen_id
             WHERE c.infra_node_id = CAST(:nid AS uuid) AND c.is_deleted = FALSE
-            ORDER BY c.created_at DESC
-            LIMIT 50
+            ORDER BY c.created_at DESC LIMIT 20
         """),
-        {"nid": str(node_id)}
+        {"nid": str(node_id)},
     ).mappings().all()
 
-    # Load latest AI-generated cluster summary
-    cluster = db.execute(
-        text("""
-            SELECT cluster_summary, complaint_count, created_at
-            FROM complaint_clusters
-            WHERE infra_node_id = CAST(:nid AS uuid)
-            ORDER BY created_at DESC LIMIT 1
-        """),
-        {"nid": str(node_id)}
+    health = db.execute(
+        text("SELECT health_score, avg_resolution_days, computed_at FROM asset_health_logs WHERE infra_node_id=CAST(:nid AS uuid) ORDER BY computed_at DESC LIMIT 1"),
+        {"nid": str(node_id)},
     ).mappings().first()
 
-    # Active workflow
-    workflow = db.execute(
-        text("""
-            SELECT wi.id, wi.status, wi.current_step_number, wi.total_steps,
-                   wi.started_at, wt.name AS template_name
-            FROM workflow_instances wi
-            JOIN workflow_templates wt ON wt.id = wi.template_id
-            WHERE wi.infra_node_id = CAST(:nid AS uuid)
-              AND wi.status = 'active'
-            ORDER BY wi.created_at DESC LIMIT 1
-        """),
-        {"nid": str(node_id)}
-    ).mappings().first()
+    open_count = sum(1 for c in complaints if c["status"] not in ("resolved", "rejected"))
+    titles     = "; ".join(c["title"] for c in complaints[:5])
+
+    try:
+        recommendation = _gemini_text(
+            system="You are a Delhi infrastructure analyst. Be concise, max 2 sentences.",
+            user=(
+                f"Infrastructure: {node['infra_type_name']} at {node['jurisdiction_name']}. "
+                f"Total complaints: {node['total_complaint_count']}, Open: {open_count}. "
+                f"Recent issues: {titles}. Suggest the most effective remediation."
+            ),
+            max_tokens=150,
+        )
+    except Exception:
+        recommendation = f"This {node['infra_type_name']} has {node['total_complaint_count']} total complaints. Consider preventive maintenance."
 
     return {
-        "node": {
-            "id":                   str(node["id"]),
-            "name":                 node["name"],
-            "status":               node["status"],
-            "lat":                  float(node["lat"]),
-            "lng":                  float(node["lng"]),
-            "infra_type_name":      node["infra_type_name"],
-            "infra_type_code":      node["infra_type_code"],
-            "jurisdiction_name":    node["jurisdiction_name"],
-            "total_complaint_count":node["total_complaint_count"],
-            "total_resolved_count": node["total_resolved_count"],
-            "last_resolved_at":     node["last_resolved_at"].isoformat() if node["last_resolved_at"] else None,
+        "node": dict(node) | {
+            "lat": float(node["lat"]) if node["lat"] else None,
+            "lng": float(node["lng"]) if node["lng"] else None,
+            "last_resolved_at": node["last_resolved_at"].isoformat() if node["last_resolved_at"] else None,
         },
+        "asset_health":         dict(health) if health else None,
+        "open_complaint_count": open_count,
         "complaints": [
-            {
-                "id":                  str(c["id"]),
-                "complaint_number":    c["complaint_number"],
-                "title":               c["title"],
-                "status":              c["status"],
-                "priority":            c["priority"],
-                "is_repeat_complaint": bool(c["is_repeat_complaint"]),
-                "agent_summary":       c["agent_summary"],
-                "citizen_name":        c["citizen_name"],
-                "created_at":          c["created_at"].isoformat() if c["created_at"] else None,
-                "resolved_at":         c["resolved_at"].isoformat() if c["resolved_at"] else None,
+            dict(c) | {
+                "id": str(c["id"]),
+                "created_at":  c["created_at"].isoformat() if c["created_at"] else None,
+                "resolved_at": c["resolved_at"].isoformat() if c["resolved_at"] else None,
             }
             for c in complaints
         ],
-        "cluster_summary": cluster["cluster_summary"] if cluster else None,
-        "active_workflow": {
-            "id":                  str(workflow["id"]),
-            "status":              workflow["status"],
-            "template_name":       workflow["template_name"],
-            "current_step_number": workflow["current_step_number"],
-            "total_steps":         workflow["total_steps"],
-            "started_at":          workflow["started_at"].isoformat() if workflow["started_at"] else None,
-        } if workflow else None,
+        "ai_recommendation": recommendation,
     }
 
 
-# ── TASK ASSIGNMENT ───────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# 10. TASK ASSIGNMENT
+# ══════════════════════════════════════════════════════════════
+
+class AssignTaskRequest(BaseModel):
+    worker_id:            Optional[str] = None
+    contractor_id:        Optional[str] = None
+    official_id:          Optional[str] = None
+    notes:                Optional[str] = None
+    override_reason_code: Optional[str] = None
+
 
 @router.post("/tasks/{task_id}/assign")
 def assign_task(
     task_id: UUID,
-    worker_id: Optional[UUID] = None,
-    contractor_id: Optional[UUID] = None,
-    official_id: Optional[UUID] = None,
-    notes: Optional[str] = None,
+    body: AssignTaskRequest,
     db: Session = Depends(get_db),
-    current_user: TokenData = Depends(
-        require_role("super_admin", "admin", "official")
-    ),
+    current_user: TokenData = Depends(get_current_user),
 ):
-    if not any([worker_id, contractor_id, official_id]):
-        raise HTTPException(status_code=400, detail="Must assign to worker, contractor, or official")
+    _require(current_user, ADMIN_ROLES)
+
+    if not any([body.worker_id, body.contractor_id, body.official_id]):
+        raise HTTPException(status_code=400, detail="Provide at least one assignee")
+
+    task = db.execute(
+        text("""
+            SELECT id, status, assigned_worker_id, assigned_contractor_id, title
+            FROM tasks WHERE id = CAST(:tid AS uuid) AND is_deleted = FALSE
+        """),
+        {"tid": str(task_id)},
+    ).mappings().first()
+
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    is_reassignment = bool(task["assigned_worker_id"] or task["assigned_contractor_id"])
+    if is_reassignment and not body.override_reason_code:
+        raise HTTPException(status_code=400, detail="override_reason_code required for reassignment")
+
+    prev = {}
+    if task["assigned_worker_id"]:
+        prev["worker_id"] = str(task["assigned_worker_id"])
+    if task["assigned_contractor_id"]:
+        prev["contractor_id"] = str(task["assigned_contractor_id"])
 
     db.execute(
         text("""
-            UPDATE tasks SET
-                assigned_worker_id     = CAST(:worker_id     AS uuid),
-                assigned_contractor_id = CAST(:contractor_id AS uuid),
-                assigned_official_id   = CAST(:official_id   AS uuid),
-                updated_at             = NOW()
-            WHERE id = CAST(:task_id AS uuid)
+            UPDATE tasks
+               SET assigned_worker_id     = CAST(:wid AS uuid),
+                   assigned_contractor_id = CAST(:cid AS uuid),
+                   assigned_official_id   = CAST(:oid AS uuid),
+                   override_reason_code   = :orc,
+                   override_notes         = :notes,
+                   override_by            = CAST(:by  AS uuid),
+                   override_at            = CASE WHEN :orc IS NOT NULL THEN NOW() ELSE override_at END,
+                   previous_assignee      = CAST(:prev AS jsonb),
+                   status = CASE WHEN status='pending' THEN 'accepted' ELSE status END,
+                   updated_at = NOW()
+             WHERE id = CAST(:tid AS uuid)
         """),
         {
-            "task_id":       str(task_id),
-            "worker_id":     str(worker_id)     if worker_id     else None,
-            "contractor_id": str(contractor_id) if contractor_id else None,
-            "official_id":   str(official_id)   if official_id   else None,
-        }
+            "tid": str(task_id), "wid": body.worker_id, "cid": body.contractor_id,
+            "oid": body.official_id, "orc": body.override_reason_code,
+            "notes": body.notes, "by": str(current_user.user_id),
+            "prev": json.dumps(prev) if prev else "{}",
+        },
     )
 
-    # Log override reason if it's a re-assignment
-    if notes:
+    if body.worker_id:
         db.execute(
-            text("""
-                INSERT INTO domain_events (event_type, entity_type, entity_id, actor_id, actor_type, payload, city_id)
-                SELECT 'TASK_ASSIGNED', 'task', CAST(:task_id AS uuid),
-                       CAST(:actor AS uuid), 'official',
-                       CAST(:payload AS jsonb),
-                       city_id
-                FROM tasks WHERE id = CAST(:task_id AS uuid)
-            """),
-            {
-                "task_id": str(task_id),
-                "actor":   str(current_user.user_id),
-                "payload": f'{{"worker_id":"{worker_id}","contractor_id":"{contractor_id}","notes":"{notes}"}}',
-            }
+            text("UPDATE workers SET current_task_count=current_task_count+1, updated_at=NOW() WHERE id=CAST(:wid AS uuid)"),
+            {"wid": body.worker_id},
         )
+        worker_user = db.execute(
+            text("SELECT user_id FROM workers WHERE id = CAST(:wid AS uuid)"), {"wid": body.worker_id}
+        ).scalar()
+        if worker_user:
+            dispatch_notification(
+                db, user_id=str(worker_user), event_type="TASK_ASSIGNED",
+                variables={"task_title": task["title"]}, data={"task_id": str(task_id)},
+            )
 
     db.commit()
     return {"status": "assigned", "task_id": str(task_id)}
 
 
-# ── COMPLAINT RE-ROUTING (if wrong dept) ─────────────────────────
-
-@router.post("/complaints/{complaint_id}/reroute")
-def reroute_complaint(
-    complaint_id: UUID,
-    new_dept_ids: list[UUID],
-    reason: str,
-    db: Session = Depends(get_db),
-    current_user: TokenData = Depends(
-        require_role("super_admin", "admin", "official")
-    ),
-):
-    dept_ids_str = "{" + ",".join(str(d) for d in new_dept_ids) + "}"
-    db.execute(
-        text("""
-            UPDATE complaints
-               SET agent_suggested_dept_ids = CAST(:dept_ids AS uuid[]),
-                   updated_at = NOW()
-             WHERE id = CAST(:cid AS uuid)
-        """),
-        {"cid": str(complaint_id), "dept_ids": dept_ids_str}
-    )
-    db.execute(
-        text("""
-            INSERT INTO agent_logs (agent_type, complaint_id, input_data, output_data, action_taken, confidence_score)
-            VALUES ('HUMAN_REROUTE', CAST(:cid AS uuid),
-                    CAST(:input AS jsonb), CAST(:output AS jsonb),
-                    'DEPT_REROUTED', 1.0)
-        """),
-        {
-            "cid":    str(complaint_id),
-            "input":  f'{{"rerouted_by":"{current_user.user_id}"}}',
-            "output": f'{{"new_dept_ids":{[str(d) for d in new_dept_ids]},"reason":"{reason}"}}',
-        }
-    )
-    db.commit()
-    return {"status": "rerouted", "new_dept_ids": [str(d) for d in new_dept_ids]}
-
-
-# ── KPI DASHBOARD — scoped by role ───────────────────────────────
-
-@router.get("/dashboard/kpi")
-def get_kpi_dashboard(
-    db: Session = Depends(get_db),
-    current_user: TokenData = Depends(
-        require_role("super_admin", "admin", "official")
-    ),
-):
-    ctx = _get_user_context(db, current_user.user_id)
-
-    scope_filter = "c.city_id = CAST(:city_id AS uuid)"
-    params = {"city_id": str(ctx["city_id"])}
-
-    if ctx["role"] == "admin" and ctx["department_id"]:
-        scope_filter += " AND CAST(:dept_id AS uuid) = ANY(c.agent_suggested_dept_ids)"
-        params["dept_id"] = str(ctx["department_id"])
-    elif ctx["role"] == "official" and ctx["jurisdiction_id"]:
-        scope_filter += " AND c.jurisdiction_id = CAST(:jur_id AS uuid)"
-        params["jur_id"] = str(ctx["jurisdiction_id"])
-
-    row = db.execute(
-        text(f"""
-            SELECT
-                COUNT(*)                                                        AS total_complaints,
-                COUNT(*) FILTER (WHERE c.status NOT IN ('resolved','closed','rejected'))
-                                                                                AS open_complaints,
-                COUNT(*) FILTER (WHERE c.status IN ('resolved','closed'))       AS resolved_complaints,
-                COUNT(*) FILTER (WHERE c.priority IN ('critical','emergency'))  AS critical_count,
-                COUNT(*) FILTER (WHERE c.is_repeat_complaint = TRUE)            AS repeat_count,
-                COUNT(*) FILTER (WHERE c.status = 'received'
-                    AND c.created_at < NOW() - INTERVAL '3 days')               AS stale_unassigned,
-                ROUND(AVG(
-                    EXTRACT(EPOCH FROM (c.resolved_at - c.created_at)) / 86400.0
-                ) FILTER (WHERE c.resolved_at IS NOT NULL), 1)                  AS avg_resolution_days,
-                COUNT(DISTINCT c.infra_node_id)                                 AS unique_nodes_affected
-            FROM complaints c
-            WHERE {scope_filter} AND c.is_deleted = FALSE
-        """),
-        params
-    ).mappings().first()
-
-    # Top infra types by complaint count
-    top_infra = db.execute(
-        text(f"""
-            SELECT it.name AS infra_type, it.code, COUNT(*) AS count
-            FROM complaints c
-            JOIN infra_nodes n ON n.id = c.infra_node_id
-            JOIN infra_types it ON it.id = n.infra_type_id
-            WHERE {scope_filter} AND c.is_deleted = FALSE
-            GROUP BY it.name, it.code
-            ORDER BY count DESC LIMIT 5
-        """),
-        params
-    ).mappings().all()
-
-    # Status breakdown
-    status_breakdown = db.execute(
-        text(f"""
-            SELECT c.status, COUNT(*) AS count
-            FROM complaints c
-            WHERE {scope_filter} AND c.is_deleted = FALSE
-            GROUP BY c.status ORDER BY count DESC
-        """),
-        params
-    ).mappings().all()
-
-    # SLA breach risk — complaints open > 30 days without resolution
-    sla_at_risk = db.execute(
-        text(f"""
-            SELECT COUNT(*) AS count
-            FROM complaints c
-            WHERE {scope_filter} AND c.is_deleted = FALSE
-              AND c.status NOT IN ('resolved','closed','rejected')
-              AND c.created_at < NOW() - INTERVAL '30 days'
-        """),
-        params
-    ).scalar()
-
-    return {
-        "summary": {
-            "total_complaints":     int(row["total_complaints"] or 0),
-            "open_complaints":      int(row["open_complaints"] or 0),
-            "resolved_complaints":  int(row["resolved_complaints"] or 0),
-            "critical_count":       int(row["critical_count"] or 0),
-            "repeat_count":         int(row["repeat_count"] or 0),
-            "stale_unassigned":     int(row["stale_unassigned"] or 0),
-            "avg_resolution_days":  float(row["avg_resolution_days"]) if row["avg_resolution_days"] else None,
-            "unique_nodes_affected":int(row["unique_nodes_affected"] or 0),
-            "sla_at_risk":          int(sla_at_risk or 0),
-        },
-        "top_infra_types": [
-            {"infra_type": r["infra_type"], "code": r["code"], "count": int(r["count"])}
-            for r in top_infra
-        ],
-        "status_breakdown": [
-            {"status": r["status"], "count": int(r["count"])}
-            for r in status_breakdown
-        ],
-    }
-
-
-# ── WORKERS & CONTRACTORS AVAILABLE ──────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# 11. AVAILABLE WORKERS
+# ══════════════════════════════════════════════════════════════
 
 @router.get("/workers/available")
-def list_available_workers(
-    dept_id: Optional[UUID] = Query(default=None),
-    skill: Optional[str] = Query(default=None),
+def get_available_workers(
+    dept_id: Optional[str] = Query(default=None),
+    skill:   Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
-    current_user: TokenData = Depends(
-        require_role("super_admin", "admin", "official")
-    ),
+    current_user: TokenData = Depends(get_current_user),
 ):
-    ctx = _get_user_context(db, current_user.user_id)
-    params = {"city_id": str(ctx["city_id"])}
+    _require(current_user, ADMIN_ROLES)
 
-    dept_filter = ""
-    if ctx["role"] in ("admin", "official") and ctx["department_id"]:
-        dept_filter = "AND w.department_id = CAST(:dept_id AS uuid)"
-        params["dept_id"] = str(ctx["department_id"])
-    elif dept_id:
-        dept_filter = "AND w.department_id = CAST(:dept_id AS uuid)"
-        params["dept_id"] = str(dept_id)
-
-    skill_filter = ""
+    params: Dict[str, Any] = {}
+    filters = ["w.is_available = TRUE"]
+    if dept_id:
+        filters.append("w.department_id = CAST(:dept_id AS uuid)"); params["dept_id"] = dept_id
     if skill:
-        skill_filter = "AND :skill = ANY(w.skills)"
-        params["skill"] = skill
+        filters.append(":skill = ANY(w.skills)"); params["skill"] = skill
 
     rows = db.execute(
         text(f"""
-            SELECT
-                w.id, w.employee_id, w.skills,
-                w.is_available, w.current_task_count, w.performance_score,
-                u.full_name, u.phone,
-                d.name AS department_name, d.code AS department_code,
-                c.company_name AS contractor_company
+            SELECT w.id, w.employee_id, w.skills, w.current_task_count, w.performance_score,
+                   u.full_name, u.phone,
+                   d.name AS dept_name, d.code AS dept_code,
+                   c.company_name AS contractor_name
             FROM workers w
             JOIN users u ON u.id = w.user_id
-            JOIN departments d ON d.id = w.department_id
+            LEFT JOIN departments d ON d.id = w.department_id
             LEFT JOIN contractors c ON c.id = w.contractor_id
-            WHERE u.city_id = CAST(:city_id AS uuid)
-              AND w.is_available = TRUE
-              AND w.current_task_count < 5
-              {dept_filter}
-              {skill_filter}
-            ORDER BY w.performance_score DESC, w.current_task_count ASC
+            WHERE {" AND ".join(filters)}
+            ORDER BY w.performance_score DESC, w.current_task_count ASC LIMIT 50
         """),
-        params
+        params,
     ).mappings().all()
 
-    return [
-        {
-            "id":                 str(r["id"]),
-            "employee_id":        r["employee_id"],
-            "full_name":          r["full_name"],
-            "phone":              r["phone"],
-            "skills":             r["skills"],
-            "is_available":       r["is_available"],
-            "current_task_count": r["current_task_count"],
-            "performance_score":  float(r["performance_score"]),
-            "department_name":    r["department_name"],
-            "department_code":    r["department_code"],
-            "contractor_company": r["contractor_company"],
-        }
-        for r in rows
-    ]
+    return [dict(r) | {"id": str(r["id"])} for r in rows]
 
 
-# ── TENDER REQUEST ────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
+# 12. AVAILABLE CONTRACTORS
+# ══════════════════════════════════════════════════════════════
 
-@router.post("/tenders/request")
-def request_tender(
-    complaint_id: UUID,
-    workflow_step_instance_id: Optional[UUID],
-    title: str,
-    description: str,
-    scope_of_work: str,
-    estimated_cost: float,
+@router.get("/contractors/available")
+def get_available_contractors(
+    dept_id: Optional[str] = Query(default=None),
     db: Session = Depends(get_db),
-    current_user: TokenData = Depends(
-        require_role("official", "admin")
-    ),
+    current_user: TokenData = Depends(get_current_user),
 ):
-    ctx = _get_user_context(db, current_user.user_id)
+    _require(current_user, ADMIN_ROLES)
 
-    # Generate tender number
-    tender_number = db.execute(
-        text("SELECT 'TDR-DEL-' || TO_CHAR(NOW(), 'YYYYMMDD') || '-' || LPAD(nextval('tender_seq')::TEXT, 4, '0')")
-    ).scalar()
+    params: Dict[str, Any] = {}
+    filters = ["c.is_blacklisted=FALSE", "(c.license_expiry IS NULL OR c.license_expiry>NOW())"]
+    if dept_id:
+        filters.append("CAST(:dept_id AS uuid)=ANY(c.registered_dept_ids)"); params["dept_id"] = dept_id
 
-    # Create sequence if not exists
-    db.execute(text("CREATE SEQUENCE IF NOT EXISTS tender_seq START 1"))
-
-    tender_number = f"TDR-DEL-{__import__('datetime').date.today().strftime('%Y%m%d')}-{str(current_user.user_id)[-4:].upper()}"
-
-    db.execute(
-        text("""
-            INSERT INTO tenders (
-                tender_number, department_id, workflow_step_instance_id,
-                complaint_id, requested_by,
-                title, description, scope_of_work,
-                estimated_cost, status
-            ) VALUES (
-                :tn, CAST(:dept_id AS uuid),
-                CAST(:wsi_id AS uuid), CAST(:cid AS uuid),
-                CAST(:req_by AS uuid),
-                :title, :desc, :scope,
-                :cost, 'draft'
-            )
+    rows = db.execute(
+        text(f"""
+            SELECT c.id, c.company_name, c.registration_number,
+                   c.performance_score, c.max_concurrent_tasks, c.license_expiry,
+                   u.full_name AS contact_name, u.phone AS contact_phone,
+                   COUNT(t.id) FILTER(WHERE t.status NOT IN ('completed','cancelled','rejected')) AS active_tasks
+            FROM contractors c
+            JOIN users u ON u.id = c.user_id
+            LEFT JOIN tasks t ON t.assigned_contractor_id=c.id AND t.is_deleted=FALSE
+            WHERE {" AND ".join(filters)}
+            GROUP BY c.id, c.company_name, c.registration_number,
+                     c.performance_score, c.max_concurrent_tasks, c.license_expiry,
+                     u.full_name, u.phone
+            HAVING COUNT(t.id) FILTER(WHERE t.status NOT IN ('completed','cancelled','rejected'))<c.max_concurrent_tasks
+            ORDER BY c.performance_score DESC LIMIT 30
         """),
-        {
-            "tn":      tender_number,
-            "dept_id": str(ctx["department_id"]),
-            "wsi_id":  str(workflow_step_instance_id) if workflow_step_instance_id else None,
-            "cid":     str(complaint_id),
-            "req_by":  str(current_user.user_id),
-            "title":   title,
-            "desc":    description,
-            "scope":   scope_of_work,
-            "cost":    estimated_cost,
-        }
-    )
-    db.commit()
-    return {"status": "tender_created", "tender_number": tender_number}
+        params,
+    ).mappings().all()
+
+    return [dict(r) | {"id": str(r["id"])} for r in rows]
+
+
+# ══════════════════════════════════════════════════════════════
+# 13. DEPARTMENTS LIST
+# ══════════════════════════════════════════════════════════════
+
+@router.get("/departments")
+def get_departments(
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    _require(current_user, ADMIN_ROLES)
+
+    rows = db.execute(
+        text("""
+            SELECT d.id, d.name, d.code, d.contact_email, d.contact_phone,
+                   j.name AS jurisdiction_name, u.full_name AS head_name
+            FROM departments d
+            LEFT JOIN jurisdictions j ON j.id = d.jurisdiction_id
+            LEFT JOIN users u ON u.id = d.head_official_id
+            ORDER BY d.name
+        """),
+    ).mappings().all()
+
+    return [dict(r) | {"id": str(r["id"])} for r in rows]
+
+
+# ══════════════════════════════════════════════════════════════
+# 14. OFFICIALS LIST
+# ══════════════════════════════════════════════════════════════
+
+@router.get("/officials")
+def get_officials(
+    dept_id: Optional[str] = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    _require(current_user, UPPER_ROLES)
+
+    params: Dict[str, Any] = {}
+    filters = ["u.role IN ('official','admin','super_admin')", "u.is_active=TRUE"]
+    if dept_id:
+        filters.append("u.department_id=CAST(:dept_id AS uuid)"); params["dept_id"] = dept_id
+
+    rows = db.execute(
+        text(f"""
+            SELECT u.id, u.full_name, u.email, u.phone, u.role,
+                   d.name AS dept_name, d.code AS dept_code,
+                   j.name AS jurisdiction_name
+            FROM users u
+            LEFT JOIN departments d  ON d.id = u.department_id
+            LEFT JOIN jurisdictions j ON j.id = u.jurisdiction_id
+            WHERE {" AND ".join(filters)}
+            ORDER BY u.full_name LIMIT 100
+        """),
+        params,
+    ).mappings().all()
+
+    return [dict(r) | {"id": str(r["id"])} for r in rows]

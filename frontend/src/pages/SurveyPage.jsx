@@ -6,6 +6,10 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import client from "../api/client";
 import { toast } from "sonner";
+import { Card, CardContent } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
+import { Textarea } from "../components/ui/textarea";
 
 const INFRA_ICONS = {
   STLIGHT: "💡", ROAD: "🛣️", POTHOLE: "⚠️", DRAIN: "🌊",
@@ -116,14 +120,16 @@ export default function SurveyPage() {
   if (error) {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center p-4">
-        <div className="bg-surface-container-low rounded-2xl p-8 max-w-sm w-full text-center border border-outline-variant">
-          <span className="material-symbols-outlined text-5xl text-on-surface-variant block mb-3">sentiment_dissatisfied</span>
-          <p className="font-semibold text-on-surface mb-2">Survey Unavailable</p>
-          <p className="text-sm text-on-surface-variant mb-6">{error}</p>
-          <button onClick={() => navigate("/")} className="px-6 py-2.5 bg-primary text-on-primary rounded-full text-sm font-semibold">
-            Go to Dashboard
-          </button>
-        </div>
+        <Card className="max-w-sm w-full text-center border border-outline-variant shadow-sm text-foreground">
+          <CardContent className="pt-8">
+            <span className="material-symbols-outlined text-5xl text-muted-foreground block mb-3">sentiment_dissatisfied</span>
+            <p className="font-semibold text-foreground mb-2">Survey Unavailable</p>
+            <p className="text-sm text-muted-foreground mb-6">{error}</p>
+            <Button onClick={() => navigate("/")} className="w-full h-10 rounded-full font-semibold">
+              Go to Dashboard
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -132,32 +138,34 @@ export default function SurveyPage() {
   if (submitted) {
     return (
       <div className="min-h-screen bg-surface flex items-center justify-center p-4">
-        <div className="bg-surface-container-low rounded-3xl p-10 max-w-sm w-full text-center border border-outline-variant shadow-lg">
-          <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-5">
-            <span className="material-symbols-outlined text-green-600 text-4xl">check_circle</span>
-          </div>
-          <h2 className="text-xl font-headline font-bold text-on-surface mb-2">
-            {rating >= 4 ? "Thank you! 🙏" : "Feedback Received"}
-          </h2>
-          <p className="text-sm text-on-surface-variant mb-2">
-            {rating >= 4
-              ? "We're glad the civic issue was addressed to your satisfaction."
-              : rating >= 3
-              ? "We appreciate your honest feedback and will work to improve."
-              : "We've flagged this for investigation. An official will follow up."}
-          </p>
-          {rating < 3 && (
-            <p className="text-xs text-orange-600 bg-orange-50 px-4 py-2 rounded-xl mb-4">
-              Your feedback has been escalated to the concerned official.
+        <Card className="max-w-sm w-full text-center border border-outline-variant shadow-lg text-foreground">
+          <CardContent className="pt-10">
+            <div className="w-20 h-20 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-5">
+              <span className="material-symbols-outlined text-green-600 text-4xl">check_circle</span>
+            </div>
+            <h2 className="text-xl font-headline font-bold text-foreground mb-2">
+              {rating >= 4 ? "Thank you! 🙏" : "Feedback Received"}
+            </h2>
+            <p className="text-sm text-muted-foreground mb-2">
+              {rating >= 4
+                ? "We're glad the civic issue was addressed to your satisfaction."
+                : rating >= 3
+                ? "We appreciate your honest feedback and will work to improve."
+                : "We've flagged this for investigation. An official will follow up."}
             </p>
-          )}
-          <p className="text-xs text-on-surface-variant mb-6">
-            Your rating: {"★".repeat(rating)}{"☆".repeat(5 - rating)} {RATING_LABELS[rating]}
-          </p>
-          <button onClick={() => navigate("/")} className="w-full py-3 bg-primary text-on-primary rounded-xl font-semibold text-sm">
-            Back to Dashboard
-          </button>
-        </div>
+            {rating < 3 && (
+              <p className="text-xs text-orange-600 bg-orange-50 px-4 py-2 rounded-xl mb-4">
+                Your feedback has been escalated to the concerned official.
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground mb-6">
+              Your rating: {"★".repeat(rating)}{"☆".repeat(5 - rating)} {RATING_LABELS[rating]}
+            </p>
+            <Button onClick={() => navigate("/")} className="w-full py-3 h-11 rounded-xl font-semibold">
+              Back to Dashboard
+            </Button>
+          </CardContent>
+        </Card>
       </div>
     );
   }
@@ -178,113 +186,129 @@ export default function SurveyPage() {
       <div className="max-w-lg mx-auto px-4 py-6 flex flex-col gap-6">
 
         {/* Complaint summary */}
-        <div className="bg-surface-container-low rounded-2xl p-5 border border-outline-variant">
-          <div className="flex items-center gap-3 mb-3">
-            <span className="text-3xl">{infraIcon}</span>
-            <div>
-              <p className="text-xs font-semibold text-on-surface-variant">{survey.infra_type_name || "Civic Issue"}</p>
-              <p className="text-xs font-mono text-primary">#{survey.complaint_number}</p>
+        <Card className="border border-outline-variant shadow-sm">
+          <CardContent className="p-5">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="text-3xl">{infraIcon}</span>
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground">{survey.infra_type_name || "Civic Issue"}</p>
+                <p className="text-xs font-mono text-primary">#{survey.complaint_number}</p>
+              </div>
             </div>
-          </div>
-          <p className="font-semibold text-on-surface text-sm mb-1">{survey.complaint_title}</p>
-          {survey.address_text && (
-            <p className="text-xs text-on-surface-variant flex items-center gap-1">
-              <span className="material-symbols-outlined text-[12px]">location_on</span>
-              {survey.address_text}
-            </p>
-          )}
-          <div className="mt-2 px-2 py-1 rounded-lg inline-block text-xs"
-            style={{
-              background: survey.complaint_status === "resolved" ? "#f0fdf4" : "#eff6ff",
-              color:      survey.complaint_status === "resolved" ? "#16a34a" : "#2563eb",
-            }}>
-            Status: {survey.complaint_status?.replace("_", " ")}
-          </div>
-        </div>
+            <p className="font-semibold text-foreground text-sm mb-1">{survey.complaint_title}</p>
+            {survey.address_text && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1">
+                <span className="material-symbols-outlined text-[12px]">location_on</span>
+                {survey.address_text}
+              </p>
+            )}
+            <div className="mt-2">
+              <Badge variant={survey.complaint_status === "resolved" ? "default" : "secondary"}>
+                Status: {survey.complaint_status?.replace("_", " ")}
+              </Badge>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Star rating */}
-        <div className="bg-surface-container-low rounded-2xl p-6 border border-outline-variant text-center">
-          <p className="text-sm font-semibold text-on-surface mb-4">How would you rate the work done?</p>
-          <StarRating value={rating} onChange={setRating} />
-          {rating > 0 && (
-            <p className="mt-3 text-sm font-semibold" style={{
-              color: rating <= 2 ? "#ef4444" : rating === 3 ? "#f97316" : "#10b981"
-            }}>
-              {RATING_LABELS[rating]}
-            </p>
-          )}
-        </div>
+        <Card className="border-outline-variant text-center shadow-sm">
+          <CardContent className="p-6">
+            <p className="text-sm font-semibold text-foreground mb-4">How would you rate the work done?</p>
+            <StarRating value={rating} onChange={setRating} />
+            {rating > 0 && (
+              <p className="mt-3 text-sm font-semibold" style={{
+                color: rating <= 2 ? "#ef4444" : rating === 3 ? "#f97316" : "#10b981"
+              }}>
+                {RATING_LABELS[rating]}
+              </p>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Is resolved? (closing survey) */}
         {isClosing && (
-          <div className="bg-surface-container-low rounded-2xl p-5 border border-outline-variant">
-            <p className="text-sm font-semibold text-on-surface mb-3">Was the issue actually fixed?</p>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { val: true,  label: "✅ Yes, it's fixed",  color: "#10b981" },
-                { val: false, label: "❌ No, still there",  color: "#ef4444" },
-              ].map(opt => (
-                <button key={String(opt.val)} type="button"
-                  onClick={() => setIsResolved(opt.val)}
-                  className="py-3 rounded-xl border-2 text-sm font-semibold transition"
-                  style={{
-                    borderColor: isResolved === opt.val ? opt.color : "#e2e8f0",
-                    background:  isResolved === opt.val ? opt.color + "15" : "transparent",
-                    color:       isResolved === opt.val ? opt.color : "#64748b",
-                  }}>
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          <Card className="border-outline-variant shadow-sm">
+            <CardContent className="p-5">
+              <p className="text-sm font-semibold text-foreground mb-3">Was the issue actually fixed?</p>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { val: true,  label: "✅ Yes, it's fixed",  color: "#10b981", bg: "rgba(16, 185, 129, 0.1)" },
+                  { val: false, label: "❌ No, still there",  color: "#ef4444", bg: "rgba(239, 68, 68, 0.1)" },
+                ].map(opt => (
+                  <Button
+                    key={String(opt.val)}
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsResolved(opt.val)}
+                    className="py-6 h-auto whitespace-normal rounded-xl border-2 text-sm font-semibold transition-all hover:bg-muted"
+                    style={isResolved === opt.val ? {
+                      borderColor: opt.color,
+                      backgroundColor: opt.bg,
+                      color: opt.color,
+                    } : {}}
+                  >
+                    {opt.label}
+                  </Button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Wants follow-up? (only if not resolved) */}
         {isClosing && isResolved === false && (
-          <div className="bg-orange-50 rounded-2xl p-5 border border-orange-200">
-            <p className="text-sm font-semibold text-orange-800 mb-3">Would you like a follow-up from the department?</p>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { val: true,  label: "Yes, please follow up" },
-                { val: false, label: "No, it's fine" },
-              ].map(opt => (
-                <button key={String(opt.val)} type="button"
-                  onClick={() => setWantsFollowup(opt.val)}
-                  className={`py-2.5 rounded-xl border text-sm font-semibold transition ${
-                    wantsFollowup === opt.val
-                      ? "border-orange-500 bg-orange-100 text-orange-700"
-                      : "border-orange-200 bg-white text-orange-600"
-                  }`}>
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </div>
+          <Card className="border-orange-200 bg-orange-50 shadow-sm">
+            <CardContent className="p-5">
+              <p className="text-sm font-semibold text-orange-800 mb-3">Would you like a follow-up from the department?</p>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { val: true,  label: "Yes, please follow up" },
+                  { val: false, label: "No, it's fine" },
+                ].map(opt => (
+                  <Button
+                    key={String(opt.val)}
+                    type="button"
+                    onClick={() => setWantsFollowup(opt.val)}
+                    variant="outline"
+                    className={`py-5 h-auto whitespace-normal rounded-xl border text-sm font-semibold transition-all ${
+                      wantsFollowup === opt.val
+                        ? "border-orange-500 bg-orange-100 text-orange-700 hover:bg-orange-100 hover:text-orange-700"
+                        : "border-orange-200 bg-white text-orange-600 hover:bg-orange-50"
+                    }`}
+                  >
+                    {opt.label}
+                  </Button>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* Feedback text */}
-        <div className="bg-surface-container-low rounded-2xl p-5 border border-outline-variant">
-          <p className="text-sm font-semibold text-on-surface mb-2">Any additional comments? (optional)</p>
-          <textarea
-            value={feedback}
-            onChange={e => setFeedback(e.target.value)}
-            placeholder="Tell us about your experience, what could be improved…"
-            className="w-full h-28 px-4 py-3 rounded-xl border border-outline-variant bg-surface text-sm resize-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-            maxLength={500}
-          />
-          <p className="text-[10px] text-on-surface-variant mt-1 text-right">{feedback.length}/500</p>
-        </div>
+        <Card className="border-outline-variant shadow-sm">
+          <CardContent className="p-5">
+            <p className="text-sm font-semibold text-foreground mb-2">Any additional comments? (optional)</p>
+            <Textarea
+              value={feedback}
+              onChange={e => setFeedback(e.target.value)}
+              placeholder="Tell us about your experience, what could be improved…"
+              className="resize-none min-h-[110px]"
+              maxLength={500}
+            />
+            <p className="text-[10px] text-muted-foreground mt-1 text-right">{feedback.length}/500</p>
+          </CardContent>
+        </Card>
 
         {/* Submit */}
-        <button
+        <Button
           onClick={handleSubmit}
           disabled={submitting || rating === 0 || (isClosing && isResolved === null)}
-          className="w-full py-4 bg-primary text-on-primary rounded-2xl font-bold text-base shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full py-6 rounded-2xl font-bold text-base shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 active:translate-y-0 disabled:transform-none disabled:opacity-50"
         >
           {submitting ? "Submitting…" : "Submit Feedback"}
-        </button>
+        </Button>
 
-        <p className="text-center text-xs text-on-surface-variant">
+        <p className="text-center text-xs text-muted-foreground">
           Your feedback helps improve civic services in Delhi 🌿
         </p>
       </div>

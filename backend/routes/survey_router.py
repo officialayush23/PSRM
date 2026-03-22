@@ -37,6 +37,26 @@ class SurveyResponseSubmit(BaseModel):
 
 # ── Get survey details ─────────────────────────────────────────────
 
+@router.get("/user/my")
+def get_my_surveys(
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    """Returns all pending surveys for the current citizen."""
+    rows = db.execute(
+        text("""
+            SELECT si.id, si.survey_type, si.status, si.created_at,
+                   c.id as complaint_id, c.complaint_number, c.title as complaint_title
+            FROM survey_instances si
+            JOIN complaints c ON c.id = si.complaint_id
+            WHERE si.target_user_id = CAST(:uid AS uuid)
+              AND si.status = 'pending'
+            ORDER BY si.created_at DESC
+        """),
+        {"uid": str(current_user.user_id)},
+    ).mappings().all()
+    return [dict(r) for r in rows]
+
 @router.get("/{survey_instance_id}")
 def get_survey(
     survey_instance_id: UUID,

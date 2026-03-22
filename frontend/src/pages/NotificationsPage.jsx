@@ -1,7 +1,12 @@
 import { useEffect, useState } from "react";
 import AppLayout from "../components/AppLayout";
 import { fetchMyComplaints } from "../api/complaintsApi";
+import client from "../api/client";
 import { toast } from "sonner";
+import { useNavigate } from "react-router-dom";
+import { Badge } from "../components/ui/badge";
+import { Card } from "../components/ui/card";
+import { Button } from "../components/ui/button";
 
 const STATUS_LABEL = {
   received: "Received",
@@ -46,7 +51,7 @@ function timeAgo(isoString) {
   return `${Math.floor(hrs / 24)}d ago`;
 }
 
-function complaintsToNotifications(complaints) {
+function buildNotifications(complaints, mySurveys = []) {
   const notifs = [];
 
   for (const c of complaints) {
@@ -77,21 +82,22 @@ function complaintsToNotifications(complaints) {
         read: ["resolved", "closed"].includes(c.status),
       });
     }
+  }
 
-    // "Survey" notification for resolved complaints
-    if (c.status === "resolved") {
-      notifs.push({
-        id: `survey-${c.id}`,
-        complaint_id: c.id,
-        complaint_number: c.complaint_number,
-        title: c.title,
-        type: "survey",
-        icon: "rate_review",
-        message: `Your complaint #${c.complaint_number} was resolved. Please provide feedback.`,
-        timestamp: c.resolved_at || c.updated_at,
-        read: false,
-      });
-    }
+  // Add real surveys
+  for (const s of mySurveys) {
+    notifs.push({
+      id: `survey-${s.id}`,
+      survey_instance_id: s.id,
+      complaint_id: s.complaint_id,
+      complaint_number: s.complaint_number,
+      title: s.complaint_title,
+      type: "survey",
+      icon: "rate_review",
+      message: `Please provide feedback for complaint #${s.complaint_number}.`,
+      timestamp: s.created_at,
+      read: false,
+    });
   }
 
   // Sort by timestamp descending
@@ -102,6 +108,7 @@ function complaintsToNotifications(complaints) {
 const FILTER_TABS = ["All", "Unread", "Complaints", "Surveys"];
 
 export default function NotificationsPage() {
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("All");
@@ -110,8 +117,11 @@ export default function NotificationsPage() {
     async function load() {
       setLoading(true);
       try {
-        const res = await fetchMyComplaints({ limit: 50 });
-        setNotifications(complaintsToNotifications(res.items || []));
+        const [compRes, surveyRes] = await Promise.all([
+          fetchMyComplaints({ limit: 50 }),
+          client.get("/surveys/user/my").catch(() => ({ data: [] }))
+        ]);
+        setNotifications(buildNotifications(compRes.items || [], surveyRes.data || []));
       } catch (e) {
         toast.error("Failed to load notifications.");
       } finally {
@@ -206,10 +216,15 @@ export default function NotificationsPage() {
             </div>
           ) : (
             filtered.map((n) => (
-              <div
+              <Card
                 key={n.id}
-                onClick={() => markRead(n.id)}
-                className={`relative flex items-start gap-4 p-4 rounded-2xl border cursor-pointer transition ${
+                onClick={() => {
+                  markRead(n.id);
+                  if (n.type === "survey" && n.survey_instance_id) {
+                    navigate(`/survey/${n.survey_instance_id}`);
+                  }
+                }}
+                className={`relative flex items-start gap-4 p-4 cursor-pointer transition-shadow hover:shadow-md ${
                   n.read
                     ? "bg-surface-container-low border-outline-variant"
                     : "bg-primary/5 border-primary/30 shadow-sm"
@@ -234,13 +249,13 @@ export default function NotificationsPage() {
                   <p className="text-xs text-on-surface-variant mt-0.5">{timeAgo(n.timestamp)}</p>
                   {n.type === "survey" && (
                     <div className="mt-2 flex gap-2">
-                      <span className="text-xs text-on-surface-variant italic">
-                        Feedback via WhatsApp/SMS when configured
-                      </span>
+                       <Button size="sm" variant="default" className="text-xs h-7 rounded-full">
+                         Take Survey
+                       </Button>
                     </div>
                   )}
                 </div>
-              </div>
+              </Card>
             ))
           )}
         </div>

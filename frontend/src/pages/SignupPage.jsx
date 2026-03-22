@@ -2,6 +2,9 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { signup } from "../api/authApi";
 import { toast } from "sonner";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Button } from "../components/ui/button";
 
 export default function SignupPage() {
   const navigate = useNavigate();
@@ -70,53 +73,57 @@ export default function SignupPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="space-y-2">
-              <label className="block text-[13px] font-semibold text-on-surface-variant uppercase tracking-wider" htmlFor="fullName">
-                Full Name
-              </label>
-              <input
+              <Label htmlFor="fullName">Full Name</Label>
+              <Input
                 id="fullName"
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 required
-                className="w-full h-12 bg-transparent border-0 border-b border-outline-variant/30 focus:ring-0 focus:border-primary transition-all duration-300 px-4 text-[16px] placeholder:text-outline/50"
                 placeholder="Rahul Kumar"
               />
             </div>
 
-        <label>
-          City Code
-          <input
-            value={cityCode}
-            onChange={(e) => setCityCode(e.target.value.toUpperCase())}
-            required
-          />
-        </label>
+            <div className="space-y-2">
+              <Label htmlFor="email">Email Address</Label>
+              <Input
+                id="email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                placeholder="rahul.kumar@example.com"
+              />
+            </div>
 
             <div className="space-y-2">
-              <label className="block text-[13px] font-semibold text-on-surface-variant uppercase tracking-wider" htmlFor="signupPassword">
-                Password
-              </label>
-              <input
+              <Label htmlFor="cityCode">City Code</Label>
+              <Input
+                id="cityCode"
+                value={cityCode}
+                onChange={(e) => setCityCode(e.target.value.toUpperCase())}
+                required
+                placeholder="DEL"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="signupPassword">Password</Label>
+              <Input
                 id="signupPassword"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
                 minLength={8}
-                className="w-full h-12 bg-transparent border-0 border-b border-outline-variant/30 focus:ring-0 focus:border-primary transition-all duration-300 px-4 text-[16px] placeholder:text-outline/50"
                 placeholder="Min 8 characters"
               />
             </div>
 
-        <button className="submit-btn-large" type="submit" disabled={loading}>
-          {loading ? "Creating account..." : "Create Account"}
-        </button>
-
-            <button
+            <Button
               type="submit"
               disabled={loading}
-              className="w-full h-12 bg-primary-container hover:bg-primary transition-all duration-200 rounded-lg flex items-center justify-center gap-2 text-on-primary-container hover:text-on-primary font-bold group disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 group mt-4 h-12"
             >
               <span>{loading ? "Creating..." : "Create Account"}</span>
               {!loading && (
@@ -124,7 +131,7 @@ export default function SignupPage() {
                   arrow_forward
                 </span>
               )}
-            </button>
+            </Button>
           </form>
 
           <p className="text-center text-sm text-on-surface-variant mt-6">

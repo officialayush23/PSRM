@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Badge } from "./ui/badge";
 
 export default function TopBar({ title = "Dashboard", unreadCount = 0 }) {
   const navigate = useNavigate();
@@ -41,13 +42,13 @@ export default function TopBar({ title = "Dashboard", unreadCount = 0 }) {
           {/* Notification Bell */}
           <button
             onClick={() => navigate("/notifications")}
-            className="relative p-2 text-on-surface-variant hover:bg-surface-container-low rounded-full transition-colors"
+            className="relative p-2 text-on-surface-variant hover:bg-surface-container-low rounded-full transition-colors flex items-center justify-center"
           >
             <span className="material-symbols-outlined">notifications</span>
             {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 w-4 h-4 bg-error text-[10px] text-white flex items-center justify-center rounded-full font-bold">
+              <Badge variant="destructive" className="absolute -top-1 -right-1 px-1 min-w-[20px] h-5 flex items-center justify-center text-[10px] rounded-full">
                 {unreadCount > 9 ? "9+" : unreadCount}
-              </span>
+              </Badge>
             )}
           </button>
 

@@ -11,6 +11,9 @@ import {
   fetchMyStats,
 } from "../api/complaintsApi";
 import { toast } from "sonner";
+import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Badge } from "../components/ui/badge";
 
 const STATUS_COLOR = {
   received:          "#818cf8",
@@ -144,13 +147,12 @@ export default function DashboardPage() {
                   : `${stats?.total_count ?? 0} total · ${stats?.active_count ?? 0} active · ${stats?.resolved_count ?? 0} resolved`}
               </p>
             </div>
-            <Link
-              to="/submit"
-              className="bg-primary text-on-primary px-5 py-2.5 rounded-full text-sm font-semibold hover:bg-primary/90 transition flex items-center gap-2"
-            >
-              <span className="material-symbols-outlined text-[18px]">add</span>
-              New Report
-            </Link>
+            <Button asChild className="rounded-full flex items-center gap-2 px-5 font-semibold">
+              <Link to="/submit">
+                <span className="material-symbols-outlined text-[18px]">add</span>
+                New Report
+              </Link>
+            </Button>
           </div>
 
           {/* Map view toggle */}
@@ -159,18 +161,16 @@ export default function DashboardPage() {
               { key: "nearby", label: `Nearby (${nearbyPins.length})`, icon: "near_me" },
               { key: "all",    label: `All Delhi (${allPins.length})`,  icon: "public"  },
             ].map((opt) => (
-              <button
+              <Button
                 key={opt.key}
+                variant={mapView === opt.key ? "default" : "outline"}
+                size="sm"
                 onClick={() => setMapView(opt.key)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition ${
-                  mapView === opt.key
-                    ? "bg-primary text-on-primary border-primary shadow-sm"
-                    : "bg-surface-container border-outline-variant text-on-surface-variant hover:bg-surface-container-high"
-                }`}
+                className="rounded-full flex items-center gap-1.5 px-3"
               >
                 <span className="material-symbols-outlined text-[14px]">{opt.icon}</span>
                 {opt.label}
-              </button>
+              </Button>
             ))}
 
             {!loading && (
@@ -192,19 +192,19 @@ export default function DashboardPage() {
           />
 
           {/* Recent complaints */}
-          <div className="bg-surface-container-low rounded-2xl p-5 border border-outline-variant">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-headline font-semibold text-on-surface flex items-center gap-2">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between pb-2 border-b mb-3">
+              <CardTitle className="font-semibold text-on-surface flex items-center gap-2">
                 <span className="material-symbols-outlined text-[20px] text-primary">receipt_long</span>
                 My Recent Complaints
-              </h2>
+              </CardTitle>
               <Link to="/my-complaints" className="text-primary text-sm hover:underline">
                 View all →
               </Link>
-            </div>
-
+            </CardHeader>
+            <CardContent>
             {loading ? (
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3 mt-3">
                 {[1, 2, 3].map((n) => (
                   <div key={n} className="h-16 rounded-xl bg-outline-variant/30 animate-pulse" />
                 ))}
@@ -218,7 +218,7 @@ export default function DashboardPage() {
                 </Link>
               </div>
             ) : (
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-3 mt-3">
                 {complaints.map((c) => (
                   <div
                     key={c.id}
@@ -230,17 +230,19 @@ export default function DashboardPage() {
                         <span className="text-xs text-on-surface-variant font-mono">
                           #{c.complaint_number}
                         </span>
-                        <span
-                          className="text-xs font-semibold px-2 py-0.5 rounded-full capitalize"
+                        <Badge
+                          variant="outline"
+                          className="capitalize font-semibold text-xs border"
                           style={{
-                            background: (STATUS_COLOR[c.status] || "#818cf8") + "22",
-                            color:      STATUS_COLOR[c.status] || "#818cf8",
+                            backgroundColor: (STATUS_COLOR[c.status] || "#818cf8") + "15",
+                            color: STATUS_COLOR[c.status] || "#818cf8",
+                            borderColor: (STATUS_COLOR[c.status] || "#818cf8") + "40"
                           }}
                         >
                           {STATUS_LABEL[c.status] || c.status}
-                        </span>
+                        </Badge>
                         {c.is_repeat_complaint && (
-                          <span className="text-xs text-red-400 font-semibold">Repeat</span>
+                          <Badge variant="destructive" className="text-xs font-semibold">Repeat</Badge>
                         )}
                       </div>
                       <p className="text-sm font-medium text-on-surface truncate">{c.title}</p>
@@ -255,7 +257,8 @@ export default function DashboardPage() {
                 ))}
               </div>
             )}
-          </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* ── RIGHT ── */}
@@ -268,156 +271,175 @@ export default function DashboardPage() {
               { label: "Active",   value: stats?.active_count,   icon: "pending",      color: "#fb923c" },
               { label: "Resolved", value: stats?.resolved_count, icon: "check_circle", color: "#34d399" },
             ].map((s) => (
-              <div
-                key={s.label}
-                className="bg-surface-container-low rounded-2xl p-4 border border-outline-variant flex flex-col items-center gap-1"
-                style={{ borderColor: s.color + "30" }}
-              >
-                <span className="material-symbols-outlined text-[24px]" style={{ color: s.color }}>
-                  {s.icon}
-                </span>
-                <span className="text-2xl font-headline font-bold text-on-surface">
-                  {loading ? "…" : (s.value ?? 0)}
-                </span>
-                <span className="text-xs text-on-surface-variant">{s.label}</span>
-              </div>
+              <Card key={s.label} style={{ borderColor: s.color + "30" }}>
+                <CardContent className="p-4 flex flex-col items-center gap-1">
+                  <span className="material-symbols-outlined text-[24px]" style={{ color: s.color }}>
+                    {s.icon}
+                  </span>
+                  <span className="text-2xl font-headline font-bold text-on-surface">
+                    {loading ? "…" : (s.value ?? 0)}
+                  </span>
+                  <span className="text-xs text-on-surface-variant font-medium">{s.label}</span>
+                </CardContent>
+              </Card>
             ))}
           </div>
 
           {/* Delhi overview — near you vs citywide */}
-          <div className="bg-surface-container-low rounded-2xl p-5 border border-outline-variant">
-            <h2 className="font-headline font-semibold text-on-surface mb-3 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[20px] text-primary">public</span>
-              Delhi Overview
-            </h2>
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                {
-                  label: "Near You (4km)",
-                  value: nearbyPins.length,
-                  sub:   `${nearbyPins.filter(p => !["resolved","closed","rejected"].includes(p.status)).length} active`,
-                  color: "#6366f1",
-                },
-                {
-                  label: "Citywide",
-                  value: allPins.length,
-                  sub:   `${allPins.filter(p => ["critical","emergency"].includes(p.priority)).length} critical`,
-                  color: "#f97316",
-                },
-              ].map((s) => (
-                <div
-                  key={s.label}
-                  className="rounded-xl p-3 border"
-                  style={{ borderColor: s.color + "25", background: s.color + "08" }}
-                >
-                  <p className="text-xs text-on-surface-variant font-medium mb-1">{s.label}</p>
-                  <p className="text-xl font-headline font-bold" style={{ color: s.color }}>
-                    {loading ? "…" : s.value}
-                  </p>
-                  <p className="text-[10px] text-on-surface-variant mt-0.5">{s.sub}</p>
-                </div>
-              ))}
-            </div>
-          </div>
+          <Card>
+            <CardHeader className="pb-3 border-b mb-3">
+              <CardTitle className="font-semibold text-on-surface flex items-center gap-2">
+                <span className="material-symbols-outlined text-[20px] text-primary">public</span>
+                Delhi Overview
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  {
+                    label: "Near You (4km)",
+                    value: nearbyPins.length,
+                    sub:   `${nearbyPins.filter(p => !["resolved","closed","rejected"].includes(p.status)).length} active`,
+                    color: "#6366f1",
+                  },
+                  {
+                    label: "Citywide",
+                    value: allPins.length,
+                    sub:   `${allPins.filter(p => ["critical","emergency"].includes(p.priority)).length} critical`,
+                    color: "#f97316",
+                  },
+                ].map((s) => (
+                  <div
+                    key={s.label}
+                    className="rounded-xl p-3 border"
+                    style={{ borderColor: s.color + "25", background: s.color + "08" }}
+                  >
+                    <p className="text-xs text-on-surface-variant font-medium mb-1">{s.label}</p>
+                    <p className="text-2xl font-headline font-bold" style={{ color: s.color }}>
+                      {loading ? "…" : s.value}
+                    </p>
+                    <p className="text-[11px] font-medium text-on-surface-variant mt-0.5">{s.sub}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Resolution rate */}
-          <div className="bg-surface-container-low rounded-2xl p-5 border border-outline-variant">
-            <h2 className="font-headline font-semibold text-on-surface mb-4 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[20px] text-primary">timer</span>
-              Resolution Rate
-            </h2>
-            <div className="flex items-center gap-6">
-              <div className="relative w-16 h-16 shrink-0">
-                <svg className="rotate-[-90deg]" width="64" height="64" viewBox="0 0 64 64">
-                  <circle cx="32" cy="32" r="24" fill="none" stroke="#e2e8f0" strokeWidth="6" />
-                  <circle
-                    cx="32" cy="32" r="24" fill="none"
-                    stroke={slaPercent >= 70 ? "#10b981" : slaPercent >= 40 ? "#f97316" : "#ef4444"}
-                    strokeWidth="6" strokeLinecap="round"
-                    strokeDasharray={circumference}
-                    strokeDashoffset={slaOffset}
-                    style={{ transition: "stroke-dashoffset 0.6s ease" }}
-                  />
-                </svg>
-                <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-on-surface">
-                  {loading ? "…" : `${slaPercent}%`}
-                </span>
-              </div>
-              <div>
-                <p className="text-sm font-medium text-on-surface">
-                  {loading ? "Loading…" : `${totalResolved} of ${totalAll} resolved`}
-                </p>
-                {stats?.avg_resolution_days != null && (
-                  <p className="text-xs text-on-surface-variant mt-1">
-                    Avg. {stats.avg_resolution_days} days to resolve
+          <Card>
+            <CardHeader className="pb-3 border-b mb-3">
+              <CardTitle className="font-semibold text-on-surface flex items-center gap-2">
+                <span className="material-symbols-outlined text-[20px] text-primary">timer</span>
+                Resolution Rate
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-6">
+                <div className="relative w-16 h-16 shrink-0">
+                  <svg className="rotate-[-90deg]" width="64" height="64" viewBox="0 0 64 64">
+                    <circle cx="32" cy="32" r="24" fill="none" stroke="#e2e8f0" strokeWidth="6" />
+                    <circle
+                      cx="32" cy="32" r="24" fill="none"
+                      stroke={slaPercent >= 70 ? "#10b981" : slaPercent >= 40 ? "#f97316" : "#ef4444"}
+                      strokeWidth="6" strokeLinecap="round"
+                      strokeDasharray={circumference}
+                      strokeDashoffset={slaOffset}
+                      style={{ transition: "stroke-dashoffset 0.6s ease" }}
+                    />
+                  </svg>
+                  <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-on-surface">
+                    {loading ? "…" : `${slaPercent}%`}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-on-surface">
+                    {loading ? "Loading…" : `${totalResolved} of ${totalAll} resolved`}
                   </p>
-                )}
-                <span className={`text-xs font-semibold mt-1.5 inline-block px-2 py-0.5 rounded-full ${
-                  slaPercent >= 70
-                    ? "bg-green-500/10 text-green-600"
-                    : slaPercent >= 40
-                    ? "bg-orange-500/10 text-orange-600"
-                    : "bg-red-500/10 text-red-600"
-                }`}>
-                  {slaPercent >= 70 ? "On Track" : slaPercent >= 40 ? "In Progress" : "Low"}
-                </span>
+                  {stats?.avg_resolution_days != null && (
+                    <p className="text-xs text-on-surface-variant mt-1">
+                      Avg. {stats.avg_resolution_days} days to resolve
+                    </p>
+                  )}
+                  <Badge
+                    variant="outline"
+                    className={`mt-2 font-semibold ${
+                      slaPercent >= 70
+                        ? "bg-green-500/10 text-green-700 border-green-500/30"
+                        : slaPercent >= 40
+                        ? "bg-orange-500/10 text-orange-700 border-orange-500/30"
+                        : "bg-red-500/10 text-red-700 border-red-500/30"
+                    }`}
+                  >
+                    {slaPercent >= 70 ? "On Track" : slaPercent >= 40 ? "In Progress" : "Low"}
+                  </Badge>
+                </div>
               </div>
-            </div>
-          </div>
+            </CardContent>
+          </Card>
 
           {/* Quick actions */}
-          <div className="bg-surface-container-low rounded-2xl p-5 border border-outline-variant">
-            <h2 className="font-headline font-semibold text-on-surface mb-4 flex items-center gap-2">
-              <span className="material-symbols-outlined text-[20px] text-primary">bolt</span>
-              Quick Actions
-            </h2>
-            <div className="grid grid-cols-2 gap-3">
-              {[
-                { label: "Report Issue",  icon: "add_circle",    to: "/submit",        primary: true },
-                { label: "My Complaints", icon: "list_alt",      to: "/my-complaints" },
-                { label: "Call 1031",     icon: "phone",         onClick: () => window.open("tel:1031") },
-                { label: "Notifications", icon: "notifications", to: "/notifications" },
-              ].map((action) => {
-                const cls = `flex flex-col items-center gap-1.5 p-3 rounded-xl border transition text-sm font-medium ${
-                  action.primary
-                    ? "bg-primary text-on-primary border-primary hover:bg-primary/90"
-                    : "bg-surface-container border-outline-variant text-on-surface hover:bg-surface-container-high"
-                }`;
-                return action.to ? (
-                  <Link key={action.label} to={action.to} className={cls}>
-                    <span className="material-symbols-outlined text-[22px]">{action.icon}</span>
-                    {action.label}
-                  </Link>
-                ) : (
-                  <button key={action.label} className={cls} onClick={action.onClick}>
-                    <span className="material-symbols-outlined text-[22px]">{action.icon}</span>
-                    {action.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          <Card>
+            <CardHeader className="pb-3 border-b mb-3">
+              <CardTitle className="font-semibold text-on-surface flex items-center gap-2">
+                <span className="material-symbols-outlined text-[20px] text-primary">bolt</span>
+                Quick Actions
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { label: "Report Issue",  icon: "add_circle",    to: "/submit",        primary: true },
+                  { label: "My Complaints", icon: "list_alt",      to: "/my-complaints" },
+                  { label: "Call 1031",     icon: "phone",         onClick: () => window.open("tel:1031") },
+                  { label: "Notifications", icon: "notifications", to: "/notifications" },
+                ].map((action) => {
+                  if (action.to) {
+                    return (
+                      <Button asChild key={action.label} variant={action.primary ? "default" : "outline"} className="h-auto py-3 flex flex-col gap-1.5 items-center justify-center">
+                        <Link to={action.to}>
+                          <span className="material-symbols-outlined text-[22px]">{action.icon}</span>
+                          {action.label}
+                        </Link>
+                      </Button>
+                    );
+                  }
+                  return (
+                    <Button key={action.label} variant={action.primary ? "default" : "outline"} className="h-auto py-3 flex flex-col gap-1.5 items-center justify-center" onClick={action.onClick}>
+                      <span className="material-symbols-outlined text-[22px]">{action.icon}</span>
+                      {action.label}
+                    </Button>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
 
           {/* Active list */}
           {!loading && activeComplaints.length > 0 && (
-            <div className="bg-surface-container-low rounded-2xl p-5 border border-outline-variant">
-              <h2 className="font-headline font-semibold text-on-surface mb-3 flex items-center gap-2">
-                <span className="material-symbols-outlined text-[20px] text-orange-500">pending</span>
-                Active ({activeComplaints.length})
-              </h2>
-              {activeComplaints.map((c) => (
-                <Link
-                  key={c.id}
-                  to={`/complaints/${c.id}`}
-                  className="flex items-center gap-3 py-2 border-b border-outline-variant last:border-0 hover:text-primary transition"
-                >
-                  <span className="text-xs font-mono text-on-surface-variant">
-                    #{c.complaint_number}
-                  </span>
-                  <span className="text-sm text-on-surface truncate flex-1">{c.title}</span>
-                </Link>
-              ))}
-            </div>
+            <Card>
+              <CardHeader className="pb-3 border-b mb-3">
+                <CardTitle className="font-semibold text-on-surface flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[20px] text-orange-500">pending</span>
+                  Active ({activeComplaints.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex flex-col">
+                  {activeComplaints.map((c) => (
+                    <Link
+                      key={c.id}
+                      to={`/complaints/${c.id}`}
+                      className="flex items-center gap-3 py-2 border-b border-outline-variant last:border-0 hover:text-primary transition"
+                    >
+                      <span className="text-xs font-mono text-on-surface-variant">
+                        #{c.complaint_number}
+                      </span>
+                      <span className="text-sm text-on-surface truncate flex-1">{c.title}</span>
+                    </Link>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
           )}
         </div>
       </div>

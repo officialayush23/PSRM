@@ -13,6 +13,10 @@ import {
 } from "../api/complaintsApi";
 import AppLayout from "../components/AppLayout";
 import { toast } from "sonner";
+import { Card, CardHeader, CardTitle, CardContent } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
 
 const markerIcon = new L.Icon({
   iconUrl:   "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
@@ -286,66 +290,62 @@ export default function SubmitComplaintPage() {
 
         {/* ── STEP 1: Photo ── */}
         {step === 1 && (
-          <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/10 overflow-hidden shadow-sm animate-in fade-in">
-            <div className="px-5 pt-5 pb-3">
-              <p className="text-sm font-semibold text-on-surface">Take or upload a photo</p>
-              <p className="text-xs text-on-surface-variant mt-0.5">Photo helps officials assess severity faster</p>
-            </div>
+          <Card className="animate-in fade-in">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold">Take or upload a photo</CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">Photo helps officials assess severity faster</p>
+            </CardHeader>
 
-            <div className="relative h-[300px] bg-surface-container-low flex items-center justify-center mx-5 mb-5 rounded-xl overflow-hidden border border-outline-variant/10">
-              {isCameraActive ? (
-                <>
-                  <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
-                  <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-10">
-                    <button type="button" onClick={capturePhoto}
-                      className="px-5 py-2 bg-primary text-on-primary rounded-full text-sm font-bold shadow-lg">
-                      Capture
-                    </button>
-                    <button type="button" onClick={stopCamera}
-                      className="px-4 py-2 bg-surface/80 backdrop-blur text-on-surface rounded-full text-sm font-bold">
-                      Cancel
-                    </button>
+            <CardContent>
+              <div className="relative h-[300px] bg-surface-container-low flex items-center justify-center mb-5 rounded-xl overflow-hidden border border-outline-variant/10">
+                {isCameraActive ? (
+                  <>
+                    <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-10">
+                      <Button type="button" onClick={capturePhoto} className="rounded-full shadow-lg">
+                        Capture
+                      </Button>
+                      <Button variant="secondary" type="button" onClick={stopCamera} className="rounded-full">
+                        Cancel
+                      </Button>
+                    </div>
+                  </>
+                ) : imagePreview ? (
+                  <>
+                    <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                    <Button variant="secondary" size="sm" type="button" onClick={clearPhoto}
+                      className="absolute top-3 right-3 rounded-full text-xs font-bold">
+                      ✕ Remove
+                    </Button>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center gap-4">
+                    <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
+                      <span className="material-symbols-outlined text-primary text-4xl">photo_camera</span>
+                    </div>
+                    <div className="flex gap-3">
+                      <Button type="button" onClick={startCamera} className="rounded-full">
+                        Use Camera
+                      </Button>
+                      <Button variant="outline" type="button" onClick={() => fileInputRef.current?.click()} className="rounded-full">
+                        Upload File
+                      </Button>
+                    </div>
                   </div>
-                </>
-              ) : imagePreview ? (
-                <>
-                  <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
-                  <button type="button" onClick={clearPhoto}
-                    className="absolute top-3 right-3 px-3 py-1.5 bg-surface/80 backdrop-blur text-on-surface rounded-full text-xs font-bold">
-                    ✕ Remove
-                  </button>
-                </>
-              ) : (
-                <div className="flex flex-col items-center gap-4">
-                  <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
-                    <span className="material-symbols-outlined text-primary text-4xl">photo_camera</span>
-                  </div>
-                  <div className="flex gap-3">
-                    <button type="button" onClick={startCamera}
-                      className="px-4 py-2 bg-primary text-on-primary rounded-full text-sm font-bold">
-                      Use Camera
-                    </button>
-                    <button type="button" onClick={() => fileInputRef.current?.click()}
-                      className="px-4 py-2 bg-surface-container border border-outline-variant text-on-surface rounded-full text-sm font-bold">
-                      Upload File
-                    </button>
-                  </div>
-                </div>
-              )}
-              <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
-            </div>
+                )}
+                <input type="file" accept="image/*" ref={fileInputRef} className="hidden" onChange={handleFileUpload} />
+              </div>
 
-            <div className="px-5 pb-5">
-              <button
+              <Button
                 type="button"
                 disabled={!canProceedStep1}
                 onClick={() => setStep(2)}
-                className="w-full py-3 bg-primary text-on-primary rounded-xl text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+                className="w-full h-12 rounded-xl"
               >
                 {canProceedStep1 ? "Next — Set Location →" : "Photo required to continue"}
-              </button>
-            </div>
-          </div>
+              </Button>
+            </CardContent>
+          </Card>
         )}
 
         {/* ── STEP 2: Location ── */}

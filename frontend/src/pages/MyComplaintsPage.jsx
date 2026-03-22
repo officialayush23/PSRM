@@ -3,6 +3,10 @@ import { Link, useNavigate } from "react-router-dom";
 import AppLayout from "../components/AppLayout";
 import { fetchMyComplaints, fetchMyStats } from "../api/complaintsApi";
 import { toast } from "sonner";
+import { Card, CardContent } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Badge } from "../components/ui/badge";
 
 const STATUS_LABEL = {
   received: "Received",
@@ -221,13 +225,14 @@ export default function MyComplaintsPage() {
                         </p>
                       </td>
                       <td className="px-4 py-3">
-                        <span
-                          className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                            STATUS_COLOR[c.status] || "text-gray-600 bg-gray-50"
+                        <Badge
+                          variant="outline"
+                          className={`uppercase text-[10px] ${
+                            STATUS_COLOR[c.status] || "text-gray-600 bg-gray-50 border-gray-200"
                           }`}
                         >
                           {STATUS_LABEL[c.status] || c.status}
-                        </span>
+                        </Badge>
                       </td>
                       <td className="px-4 py-3">
                         <span

@@ -350,223 +350,222 @@ export default function SubmitComplaintPage() {
 
         {/* ── STEP 2: Location ── */}
         {step === 2 && (
-          <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/10 overflow-hidden shadow-sm animate-in fade-in">
-            <div className="px-5 pt-5 pb-3 flex items-center justify-between">
+          <Card className="animate-in fade-in">
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
               <div>
-                <p className="text-sm font-semibold text-on-surface">Where is the issue?</p>
-                <p className="text-xs text-on-surface-variant mt-0.5">Allow GPS, tap on map, or search by address</p>
+                <CardTitle className="text-sm font-semibold">Where is the issue?</CardTitle>
+                <p className="text-xs text-muted-foreground mt-0.5">Allow GPS, tap on map, or search by address</p>
               </div>
-              <button type="button" onClick={requestCurrentLocation}
-                className="flex items-center gap-1 px-3 py-1.5 bg-primary/10 text-primary text-xs font-bold rounded-full">
+              <Button variant="outline" size="sm" type="button" onClick={requestCurrentLocation} className="rounded-full flex items-center gap-1">
                 <span className="material-symbols-outlined text-[14px]">my_location</span>
                 Use GPS
-              </button>
-            </div>
+              </Button>
+            </CardHeader>
 
-            {/* Address search bar */}
-            <div className="px-5 pb-3 flex gap-2">
-              <input
-                type="text"
-                value={addressSearch}
-                onChange={e => setAddressSearch(e.target.value)}
-                onKeyDown={e => e.key === "Enter" && handleAddressSearch()}
-                placeholder="Search address or landmark…"
-                className="flex-1 px-3 py-2 rounded-xl border border-outline-variant bg-surface-container-low text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              />
-              <button
-                type="button"
-                onClick={handleAddressSearch}
-                disabled={searchLoading || !addressSearch.trim()}
-                className="px-4 py-2 bg-primary text-on-primary rounded-xl text-sm font-bold disabled:opacity-40"
-              >
-                {searchLoading ? "…" : "Find"}
-              </button>
-            </div>
-
-            {/* Map */}
-            <div className="mx-5 rounded-xl overflow-hidden border border-outline-variant/10" style={{ height: 280 }}>
-              <MapContainer
-                center={lat !== null ? [lat, lng] : [28.6139, 77.209]}
-                zoom={14}
-                scrollWheelZoom
-                style={{ height: "100%", width: "100%" }}
-              >
-                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
-                <LocationPicker
-                  lat={lat} lng={lng}
-                  setLat={setLat} setLng={setLng}
-                  onPin={(lat, lng) => {
-                    setLocationStatus("Location pinned on map.");
-                    doReverseGeocode(lat, lng);
-                  }}
+            <CardContent>
+              {/* Address search bar */}
+              <div className="flex gap-2 mb-3">
+                <Input
+                  type="text"
+                  value={addressSearch}
+                  onChange={e => setAddressSearch(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && handleAddressSearch()}
+                  placeholder="Search address or landmark…"
+                  className="flex-1"
                 />
-              </MapContainer>
-            </div>
+                <Button
+                  type="button"
+                  onClick={handleAddressSearch}
+                  disabled={searchLoading || !addressSearch.trim()}
+                >
+                  {searchLoading ? "…" : "Find"}
+                </Button>
+              </div>
 
-            {/* Address field */}
-            <div className="px-5 pt-3 pb-2">
-              <div className="flex items-center gap-1.5 mb-1">
-                <span className="material-symbols-outlined text-[14px] text-on-surface-variant">location_on</span>
-                <p className="text-xs font-semibold text-on-surface-variant">Address</p>
-                {addressLoading && (
-                  <span className="text-[10px] text-primary animate-pulse">Detecting…</span>
+              {/* Map */}
+              <div className="rounded-xl overflow-hidden border border-outline-variant/10 mb-4" style={{ height: 280 }}>
+                <MapContainer
+                  center={lat !== null ? [lat, lng] : [28.6139, 77.209]}
+                  zoom={14}
+                  scrollWheelZoom
+                  style={{ height: "100%", width: "100%" }}
+                >
+                  <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                  <LocationPicker
+                    lat={lat} lng={lng}
+                    setLat={setLat} setLng={setLng}
+                    onPin={(lat, lng) => {
+                      setLocationStatus("Location pinned on map.");
+                      doReverseGeocode(lat, lng);
+                    }}
+                  />
+                </MapContainer>
+              </div>
+
+              {/* Address field */}
+              <div className="mb-4">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <span className="material-symbols-outlined text-[14px] text-muted-foreground">location_on</span>
+                  <Label className="text-xs font-semibold text-muted-foreground">Address</Label>
+                  {addressLoading && (
+                    <span className="text-[10px] text-primary animate-pulse">Detecting…</span>
+                  )}
+                </div>
+                <Input
+                  type="text"
+                  value={addressText}
+                  onChange={e => setAddressText(e.target.value)}
+                  placeholder="Auto-filled from GPS · Edit if needed"
+                />
+                <p className="text-[10px] text-muted-foreground mt-1.5">
+                  Helps officials and workers find the exact location · Optional but recommended
+                </p>
+              </div>
+
+              {/* Coords */}
+              <div className="mb-6">
+                <p className="text-xs text-muted-foreground font-medium">{locationStatus}</p>
+                {lat !== null && (
+                  <p className="font-mono text-[10px] text-muted-foreground mt-0.5">
+                    {lat.toFixed(5)}, {lng.toFixed(5)}
+                  </p>
                 )}
               </div>
-              <input
-                type="text"
-                value={addressText}
-                onChange={e => setAddressText(e.target.value)}
-                placeholder="Auto-filled from GPS · Edit if needed"
-                className="w-full px-3 py-2 rounded-xl border border-outline-variant bg-surface-container-low text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
-              />
-              <p className="text-[10px] text-on-surface-variant mt-1">
-                Helps officials and workers find the exact location · Optional but recommended
-              </p>
-            </div>
 
-            {/* Coords */}
-            <div className="px-5 py-2">
-              <p className="text-xs text-on-surface-variant font-medium">{locationStatus}</p>
-              {lat !== null && (
-                <p className="font-mono text-[10px] text-on-surface-variant mt-0.5">
-                  {lat.toFixed(5)}, {lng.toFixed(5)}
-                </p>
-              )}
-            </div>
-
-            <div className="px-5 pb-5 flex gap-3">
-              <button type="button" onClick={() => setStep(1)}
-                className="px-5 py-3 bg-surface-container border border-outline-variant text-on-surface rounded-xl text-sm font-bold">
-                ← Back
-              </button>
-              <button
-                type="button"
-                disabled={!canProceedStep2}
-                onClick={() => setStep(3)}
-                className="flex-1 py-3 bg-primary text-on-primary rounded-xl text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {canProceedStep2 ? "Next — Issue Type →" : "Pin location to continue"}
-              </button>
-            </div>
-          </div>
+              <div className="flex gap-3">
+                <Button variant="outline" type="button" onClick={() => setStep(1)} className="h-12 w-24 rounded-xl">
+                  ← Back
+                </Button>
+                <Button
+                  type="button"
+                  disabled={!canProceedStep2}
+                  onClick={() => setStep(3)}
+                  className="flex-1 h-12 rounded-xl"
+                >
+                  {canProceedStep2 ? "Next — Issue Type →" : "Pin location to continue"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* ── STEP 3: Infra Type ── */}
         {step === 3 && (
-          <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/10 p-5 shadow-sm animate-in fade-in">
-            <p className="text-sm font-semibold text-on-surface mb-1">What type of issue is it?</p>
-            <p className="text-xs text-on-surface-variant mb-4">
-              Helps route to the right department. Skip if unsure — AI will classify it.
-            </p>
-
-            {infraTypesLoading ? (
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                {Array(8).fill(0).map((_, i) => (
-                  <div key={i} className="h-20 rounded-xl bg-outline-variant/20 animate-pulse" />
-                ))}
-              </div>
-            ) : (
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
-                {/* Known types from DB */}
-                {infraTypes.map(it => {
-                  const meta     = it.metadata || {};
-                  const selected = selectedInfraId === it.id;
-                  return (
-                    <button
-                      key={it.id}
-                      type="button"
-                      onClick={() => {
-                        setSelectedInfraId(selected ? "" : it.id);
-                        setCustomInfraName("");
-                      }}
-                      className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-medium transition-all ${
-                        selected
-                          ? "border-primary bg-primary/10 text-primary shadow-sm"
-                          : "border-outline-variant bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
-                      }`}
-                    >
-                      <span className="text-2xl">{meta.icon || "📍"}</span>
-                      <span className="text-center leading-tight text-[11px]">{it.name}</span>
-                    </button>
-                  );
-                })}
-
-                {/* Something Else */}
-                <button
-                  type="button"
-                  onClick={() => setSelectedInfraId("other")}
-                  className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-medium transition-all ${
-                    isOtherType
-                      ? "border-orange-400 bg-orange-50 text-orange-600 shadow-sm"
-                      : "border-outline-variant bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
-                  }`}
-                >
-                  <span className="text-2xl">🔧</span>
-                  <span className="text-center leading-tight text-[11px]">Something Else</span>
-                </button>
-
-                {/* Let AI Decide */}
-                <button
-                  type="button"
-                  onClick={() => { setSelectedInfraId("ai"); setCustomInfraName(""); }}
-                  className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-medium transition-all ${
-                    isAiInfer
-                      ? "border-violet-400 bg-violet-50 text-violet-600 shadow-sm"
-                      : "border-outline-variant bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
-                  }`}
-                >
-                  <span className="text-2xl">🤖</span>
-                  <span className="text-center leading-tight text-[11px]">Let AI Decide</span>
-                </button>
-              </div>
-            )}
-
-            {/* Custom type input */}
-            {isOtherType && (
-              <div className="mt-4 animate-in slide-in-from-top-2">
-                <label className="block text-xs font-semibold text-on-surface-variant mb-2">
-                  Describe the infrastructure type
-                </label>
-                <input
-                  type="text"
-                  value={customInfraName}
-                  onChange={e => setCustomInfraName(e.target.value)}
-                  placeholder="E.g. Flyover crack, Bus shelter damage, Park bench broken…"
-                  className="w-full px-4 py-2.5 rounded-xl border border-outline-variant bg-surface-container-low text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                  maxLength={100}
-                  autoFocus
-                />
-                <p className="text-[10px] text-on-surface-variant mt-1.5">
-                  A new infrastructure category will be created automatically.
-                </p>
-              </div>
-            )}
-
-            {isAiInfer && (
-              <p className="mt-3 text-[11px] text-violet-600 bg-violet-50 px-3 py-2 rounded-lg">
-                🤖 AI will infer the issue type from your description and photo.
+          <Card className="animate-in fade-in">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-semibold">What type of issue is it?</CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Helps route to the right department. Skip if unsure — AI will classify it.
               </p>
-            )}
+            </CardHeader>
+            <CardContent>
+              {infraTypesLoading ? (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-4">
+                  {Array(8).fill(0).map((_, i) => (
+                    <div key={i} className="h-20 rounded-xl bg-outline-variant/20 animate-pulse" />
+                  ))}
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 mb-4">
+                  {/* Known types from DB */}
+                  {infraTypes.map(it => {
+                    const meta     = it.metadata || {};
+                    const selected = selectedInfraId === it.id;
+                    return (
+                      <button
+                        key={it.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedInfraId(selected ? "" : it.id);
+                          setCustomInfraName("");
+                        }}
+                        className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-medium transition-all ${
+                          selected
+                            ? "border-primary bg-primary/10 text-primary shadow-sm"
+                            : "border-outline-variant bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
+                        }`}
+                      >
+                        <span className="text-2xl">{meta.icon || "📍"}</span>
+                        <span className="text-center leading-tight text-[11px]">{it.name}</span>
+                      </button>
+                    );
+                  })}
 
-            <div className="flex gap-3 mt-5">
-              <button type="button" onClick={() => setStep(2)}
-                className="px-5 py-3 bg-surface-container border border-outline-variant text-on-surface rounded-xl text-sm font-bold">
-                ← Back
-              </button>
-              <button
-                type="button"
-                disabled={!canProceedStep3}
-                onClick={() => setStep(4)}
-                className="flex-1 py-3 bg-primary text-on-primary rounded-xl text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                {canProceedStep3
-                  ? "Next — Describe Issue →"
-                  : isOtherType
-                  ? "Describe the type to continue"
-                  : "Select a type to continue"}
-              </button>
-            </div>
-          </div>
+                  {/* Something Else */}
+                  <button
+                    type="button"
+                    onClick={() => setSelectedInfraId("other")}
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-medium transition-all ${
+                      isOtherType
+                        ? "border-orange-400 bg-orange-50 text-orange-600 shadow-sm"
+                        : "border-outline-variant bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
+                    }`}
+                  >
+                    <span className="text-2xl">🔧</span>
+                    <span className="text-center leading-tight text-[11px]">Something Else</span>
+                  </button>
+
+                  {/* Let AI Decide */}
+                  <button
+                    type="button"
+                    onClick={() => { setSelectedInfraId("ai"); setCustomInfraName(""); }}
+                    className={`flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-medium transition-all ${
+                      isAiInfer
+                        ? "border-violet-400 bg-violet-50 text-violet-600 shadow-sm"
+                        : "border-outline-variant bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
+                    }`}
+                  >
+                    <span className="text-2xl">🤖</span>
+                    <span className="text-center leading-tight text-[11px]">Let AI Decide</span>
+                  </button>
+                </div>
+              )}
+
+              {/* Custom type input */}
+              {isOtherType && (
+                <div className="mb-4 animate-in slide-in-from-top-2">
+                  <Label className="block text-xs font-semibold text-muted-foreground mb-2">
+                    Describe the infrastructure type
+                  </Label>
+                  <Input
+                    type="text"
+                    value={customInfraName}
+                    onChange={e => setCustomInfraName(e.target.value)}
+                    placeholder="E.g. Flyover crack, Bus shelter damage, Park bench broken…"
+                    maxLength={100}
+                    autoFocus
+                  />
+                  <p className="text-[10px] text-muted-foreground mt-1.5">
+                    A new infrastructure category will be created automatically.
+                  </p>
+                </div>
+              )}
+
+              {isAiInfer && (
+                <p className="mb-4 text-[11px] text-violet-600 bg-violet-50 px-3 py-2 rounded-lg">
+                  🤖 AI will infer the issue type from your description and photo.
+                </p>
+              )}
+
+              <div className="flex gap-3">
+                <Button variant="outline" type="button" onClick={() => setStep(2)} className="h-12 w-24 rounded-xl">
+                  ← Back
+                </Button>
+                <Button
+                  type="button"
+                  disabled={!canProceedStep3}
+                  onClick={() => setStep(4)}
+                  className="flex-1 h-12 rounded-xl"
+                >
+                  {canProceedStep3
+                    ? "Next — Describe Issue →"
+                    : isOtherType
+                    ? "Describe the type to continue"
+                    : "Select a type to continue"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
         )}
 
         {/* ── STEP 4: Description + Submit ── */}
@@ -574,60 +573,60 @@ export default function SubmitComplaintPage() {
           <div className="space-y-4 animate-in fade-in">
 
             {/* Summary card */}
-            <div className="bg-surface-container rounded-xl p-4 border border-outline-variant/20 flex items-center gap-4">
+            <Card className="flex items-center gap-4 p-4 bg-muted/30">
               {imagePreview && (
                 <img src={imagePreview} alt="" className="w-14 h-14 rounded-lg object-cover flex-shrink-0" />
               )}
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-on-surface-variant">Your complaint so far</p>
-                <p className="text-sm font-medium text-on-surface truncate mt-0.5">
+                <p className="text-xs font-semibold text-muted-foreground">Your complaint so far</p>
+                <p className="text-sm font-medium mt-0.5 truncate">
                   {isKnownType
                     ? infraTypes.find(it => it.id === selectedInfraId)?.name
                     : isOtherType
                     ? customInfraName || "Custom type"
                     : "🤖 AI will classify"}
                 </p>
-                <p className="text-[10px] text-on-surface-variant mt-0.5 truncate">
+                <p className="text-[10px] text-muted-foreground mt-0.5 truncate">
                   {addressText || `${lat?.toFixed(5)}, ${lng?.toFixed(5)}`}
                 </p>
               </div>
-              <button type="button" onClick={() => setStep(3)}
-                className="ml-auto text-primary text-xs font-bold flex-shrink-0">
+              <Button variant="ghost" size="sm" type="button" onClick={() => setStep(3)} className="text-primary font-bold">
                 Edit
-              </button>
-            </div>
+              </Button>
+            </Card>
 
-            <div className="bg-surface-container-lowest rounded-xl border border-outline-variant/10 p-5 shadow-sm">
-              <label className="block text-[13px] font-semibold text-on-surface-variant uppercase tracking-wider mb-3">
-                Describe the issue
-              </label>
-              <textarea
-                className="w-full h-[130px] bg-surface-container-low border border-outline-variant/20 rounded-xl px-4 py-3 text-sm resize-vertical focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
-                value={text}
-                onChange={e => setText(e.target.value)}
-                placeholder="E.g. Pothole on the road near the market, around 40cm wide and very deep. Vehicles swerving to avoid it…"
-                required
-                autoFocus
-              />
-              <p className="text-[10px] text-on-surface-variant mt-2">
-                <span className="material-symbols-outlined text-[12px] mr-1">translate</span>
-                Supports Hindi, English, and 20+ Indian languages
-              </p>
-            </div>
+            <Card>
+              <CardContent className="pt-5">
+                <Label className="block text-[13px] font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                  Describe the issue
+                </Label>
+                <textarea
+                  className="w-full h-[130px] bg-muted/50 border border-border rounded-xl px-4 py-3 text-sm resize-vertical focus:ring-2 focus:ring-ring focus:outline-none transition-all"
+                  value={text}
+                  onChange={e => setText(e.target.value)}
+                  placeholder="E.g. Pothole on the road near the market, around 40cm wide and very deep. Vehicles swerving to avoid it…"
+                  required
+                  autoFocus
+                />
+                <p className="text-[10px] text-muted-foreground mt-2 flex items-center">
+                  <span className="material-symbols-outlined text-[12px] mr-1">translate</span>
+                  Supports Hindi, English, and 20+ Indian languages
+                </p>
+              </CardContent>
+            </Card>
 
-            <div className="flex gap-3">
-              <button type="button" onClick={() => setStep(3)}
-                className="px-5 py-3.5 bg-surface-container border border-outline-variant text-on-surface rounded-xl text-sm font-bold">
+            <div className="flex gap-3 mt-4">
+              <Button variant="outline" type="button" onClick={() => setStep(3)} className="h-12 w-24 rounded-xl">
                 ← Back
-              </button>
-              <button
+              </Button>
+              <Button
                 type="submit"
                 disabled={isSubmitting || !canSubmit}
-                className="flex-1 flex items-center justify-center gap-2 bg-primary text-on-primary py-3.5 rounded-xl font-bold text-sm shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 h-12 flex items-center justify-center gap-2 rounded-xl font-bold shadow-lg transition-all active:scale-[0.98]"
               >
                 <span className="material-symbols-outlined text-lg">send</span>
                 {isSubmitting ? "Submitting…" : "Submit Complaint"}
-              </button>
+              </Button>
             </div>
           </div>
         )}

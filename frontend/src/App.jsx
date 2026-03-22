@@ -23,6 +23,24 @@ function ProtectedRoute({ children }) {
   return user ? children : <Navigate to="/login" replace />;
 }
 
+function RoleRouter() {
+  const user = JSON.parse(localStorage.getItem("auth_user") || "{}");
+  const role = user.role;
+ 
+  if (role === "super_admin" || role === "admin") {
+    return <AdminDashboardPage />;
+  }
+  if (role === "official") {
+    return <OfficialDashboardPage />;
+  }
+  if (role === "worker" || role === "contractor") {
+    return <WorkerDashboardPage />;
+  }
+  // citizen default
+  return <DashboardPage />;
+}
+
+
 export default function App() {
   return (
     <Routes>

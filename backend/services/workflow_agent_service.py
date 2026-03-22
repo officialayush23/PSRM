@@ -24,9 +24,9 @@ import uuid as _uuid
 from typing import Any, Dict, List, Optional
 
 import vertexai
-from vertexai.generative_models import GenerationConfig, GenerativeModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+from vertexai.generative_models import GenerationConfig, GenerativeModel
 
 from config import settings
 
@@ -46,9 +46,9 @@ def _ensure_vertex():
 def _call_gemini_json(prompt: str, max_tokens: int = 600) -> str:
     _ensure_vertex()
     model = GenerativeModel(
-        "gemini-2.5-flash-preview-05-20",
+        "gemini-2.5-flash",
         system_instruction="Output only valid JSON. No markdown fences, no explanation, no prose.",
-        generation_config=GenerationConfig(temperature=0.1, max_output_tokens=max_tokens),
+        generation_config=GenerationConfig(temperature=0.1, max_output_tokens=3060),
     )
     return (model.generate_content(prompt).text or "").strip()
 

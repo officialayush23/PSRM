@@ -51,7 +51,7 @@ const ROLE_LABEL = {
 
 // ── Component ─────────────────────────────────────────────────────
 
-export default function SideNav() {
+export default function SideNav({ isMobile, onClose }) {
   const navigate = useNavigate();
   const user     = JSON.parse(localStorage.getItem("auth_user") || "{}");
   const role     = user.role || "citizen";
@@ -66,8 +66,14 @@ export default function SideNav() {
     ? user.full_name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
     : "U";
 
+  const handleLinkClick = () => {
+    if (isMobile && onClose) {
+      onClose();
+    }
+  };
+
   return (
-    <aside className="flex flex-col fixed left-0 top-0 h-full overflow-y-auto w-[240px] bg-white border-r border-outline-variant/30 z-50 shadow-sm">
+    <aside className={`flex flex-col h-full overflow-y-auto w-[240px] bg-white border-r border-outline-variant/30 shadow-sm ${!isMobile ? "fixed left-0 top-0 z-50" : ""}`}>
       {/* Brand */}
       <div className="p-6">
         <h1 className="text-xl font-bold text-slate-900 font-headline tracking-tight">
@@ -100,6 +106,7 @@ export default function SideNav() {
           <NavLink
             key={item.to}
             to={item.to}
+            onClick={handleLinkClick}
             className={({ isActive }) =>
               `flex items-center justify-between px-3 py-2.5 rounded-lg transition-colors font-medium text-sm ${
                 isActive
@@ -129,6 +136,7 @@ export default function SideNav() {
             <NavLink
               key={item.to}
               to={item.to}
+              onClick={handleLinkClick}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-lg transition-colors font-medium text-sm ${
                   isActive

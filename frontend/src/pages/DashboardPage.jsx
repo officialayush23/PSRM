@@ -136,7 +136,7 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-5 lg:w-[58%]">
 
           {/* Header */}
-          <div className="flex items-center justify-between">
+          <div className="flex items-start md:items-center justify-between flex-col md:flex-row gap-4 mb-2">
             <div>
               <h1 className="text-2xl font-headline font-bold text-on-surface">
                 Namaskar, {user.full_name?.split(" ")[0] || "Citizen"} 🙏
@@ -265,7 +265,7 @@ export default function DashboardPage() {
         <div className="flex flex-col gap-5 lg:w-[42%]">
 
           {/* Stats cards */}
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
             {[
               { label: "Total",    value: stats?.total_count,    icon: "receipt_long", color: "#818cf8" },
               { label: "Active",   value: stats?.active_count,   icon: "pending",      color: "#fb923c" },

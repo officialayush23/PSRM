@@ -498,6 +498,99 @@ function ComplaintsTab() {
   );
 }
 
+
+// ── Users tab (inline — full page is at /admin/users) ────────────
+
+function UsersTab({ isSuperAdmin }) {
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const navigate = useNavigate ? useNavigate() : null;
+
+  useEffect(() => {
+    fetchStaffUsers().then(d => { setUsers(d||[]); setLoading(false); }).catch(() => setLoading(false));
+  }, []);
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h3 className="font-bold text-slate-700">Staff Users</h3>
+          <p className="text-xs text-slate-400">{users.length} total staff</p>
+        </div>
+        {isSuperAdmin && (
+          <a href="/admin/users"
+            className="flex items-center gap-1.5 px-4 py-2 bg-sky-600 text-white rounded-xl text-sm font-bold hover:bg-sky-700 transition">
+            <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+            Full User Management
+          </a>
+        )}
+      </div>
+      {/* Quick stats */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          {r:"official",   l:"Officials",   c:"#6366f1", icon:"badge"},
+          {r:"admin",      l:"Admins",      c:"#0ea5e9", icon:"manage_accounts"},
+          {r:"worker",     l:"Workers",     c:"#10b981", icon:"engineering"},
+          {r:"contractor", l:"Contractors", c:"#f97316", icon:"handshake"},
+        ].map(s => (
+          <div key={s.r} className="bg-white border rounded-2xl p-4 flex flex-col items-center gap-1"
+            style={{ borderColor: s.c+"25" }}>
+            <span className="material-symbols-outlined text-[20px]" style={{ color: s.c }}>{s.icon}</span>
+            <span className="text-2xl font-black" style={{ color: s.c }}>
+              {loading ? "…" : users.filter(u=>u.role===s.r).length}
+            </span>
+            <span className="text-xs text-slate-400">{s.l}</span>
+          </div>
+        ))}
+      </div>
+      {/* Recent list */}
+      <div className="bg-white border rounded-2xl overflow-hidden">
+        <div className="px-4 py-3 border-b bg-slate-50">
+          <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Recent Staff</p>
+        </div>
+        <div className="divide-y divide-slate-50">
+          {loading ? Array(4).fill(0).map((_,i) => (
+            <div key={i} className="p-4 flex items-center gap-3">
+              <div className="w-8 h-8 rounded-full bg-slate-100 animate-pulse" />
+              <div className="flex-1 flex flex-col gap-1">
+                <div className="h-3 bg-slate-100 rounded animate-pulse w-32" />
+                <div className="h-3 bg-slate-100 rounded animate-pulse w-24" />
+              </div>
+            </div>
+          )) : users.slice(0,8).map(u => {
+            const colors = {official:"#6366f1",admin:"#0ea5e9",worker:"#10b981",contractor:"#f97316",super_admin:"#8b5cf6"};
+            const c = colors[u.role]||"#6366f1";
+            return (
+              <div key={u.id} className="p-4 flex items-center gap-3 hover:bg-slate-50 transition">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-black flex-shrink-0"
+                  style={{ background: c }}>
+                  {u.full_name?.charAt(0)}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-slate-800 text-sm">{u.full_name}</p>
+                  <p className="text-xs text-slate-400">{u.dept_name || "No dept"}</p>
+                </div>
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full capitalize"
+                  style={{ background: c+"18", color: c }}>{u.role}</span>
+                <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${
+                  u.is_active ? "bg-green-50 text-green-600" : "bg-red-50 text-red-500"
+                }`}>{u.is_active ? "Active" : "Inactive"}</span>
+              </div>
+            );
+          })}
+        </div>
+        {!loading && users.length > 8 && (
+          <div className="p-4 text-center border-t">
+            <a href="/admin/users" className="text-sky-600 text-sm font-semibold hover:underline">
+              View all {users.length} users →
+            </a>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Main ──────────────────────────────────────────────────────────
 
 const TABS_ADMIN = [
@@ -559,6 +652,7 @@ export default function AdminDashboardPage() {
         {tab === "officials"   && <OfficialsTab />}
         {tab === "workers"     && <WorkersTab />}
         {tab === "contractors" && <ContractorsTab />}
+        {tab === "users"        && <UsersTab isSuperAdmin={isSuperAdmin} />}
       </div>
 
       <CRMAgentChat />

@@ -16,11 +16,11 @@ import SignupPage           from "./pages/SignupPage";
 import SubmitComplaintPage  from "./pages/SubmitComplaintPage";
 import SurveyPage           from "./pages/SurveyPage";
 
-// Role-specific dashboards (these pages already exist in your codebase)
+// Role-specific dashboards
 import OfficialDashboardPage from "./pages/admin/OfficialDashboardPage";
 import AdminDashboardPage    from "./pages/admin/AdminDashboardPage";
-import WorkerDashboardPage from "./pages/admin/WorkerDashboardPage";
-
+import WorkerDashboardPage   from "./pages/admin/WorkerDashboardPage";   // note: lives in pages/ not pages/admin/
+import UserManagementPage    from "./pages/admin/UserManagementPage";
 
 // ── Auth guard ────────────────────────────────────────────────────
 
@@ -70,8 +70,7 @@ export default function App() {
       <Route path="/signup" element={<SignupPage />} />
       <Route path="/map"    element={<PublicMapPage />} />
 
-      {/* Survey is semi-public: accessible via notification link,
-          but the API enforces auth via Firebase token */}
+      {/* Survey accessible via notification link; API enforces auth */}
       <Route path="/survey/:surveyInstanceId" element={<SurveyPage />} />
 
       {/* ── Role-based dashboard ── */}
@@ -100,12 +99,21 @@ export default function App() {
           </ProtectedRoute>
         }
       />
-      {/* Admin complaint detail view reuses the same ComplaintStatusPage */}
       <Route
         path="/admin/complaints/:id"
         element={
           <ProtectedRoute roles={["admin", "super_admin", "official"]}>
             <ComplaintStatusPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* ── User Management (super_admin + admin) ── */}
+      <Route
+        path="/admin/users"
+        element={
+          <ProtectedRoute roles={["super_admin", "admin"]}>
+            <UserManagementPage />
           </ProtectedRoute>
         }
       />

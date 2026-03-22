@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Badge } from "./ui/badge";
 
-export default function TopBar({ title = "Dashboard", unreadCount = 0 }) {
+export default function TopBar({ title = "Dashboard", unreadCount = 0, onMenuClick }) {
   const navigate = useNavigate();
   const stored = localStorage.getItem("auth_user");
   const user = stored ? JSON.parse(stored) : null;
@@ -19,8 +19,16 @@ export default function TopBar({ title = "Dashboard", unreadCount = 0 }) {
   }
 
   return (
-    <header className="flex items-center justify-between px-8 h-[60px] sticky top-0 z-40 bg-white/80 backdrop-blur-md shadow-sm">
-      <h2 className="text-xl font-bold font-headline text-on-surface">{title}</h2>
+    <header className="flex items-center justify-between px-4 md:px-8 h-[60px] sticky top-0 z-40 bg-white/80 backdrop-blur-md shadow-sm border-b md:border-b-0 border-outline-variant/30">
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onMenuClick}
+          className="md:hidden flex items-center justify-center p-2 rounded-full hover:bg-surface-container transition-colors text-on-surface"
+        >
+          <span className="material-symbols-outlined">menu</span>
+        </button>
+        <h2 className="text-xl font-bold font-headline text-on-surface truncate pr-2 max-w-[200px] md:max-w-none">{title}</h2>
+      </div>
 
       <div className="flex items-center gap-6">
         {/* Search */}

@@ -546,7 +546,7 @@ async def ingest_complaint(
 
 # ── 9. Signed upload URL ──────────────────────────────────────────
 
-@router.get("/complaints/upload-url")
+@router.get("/upload-url")
 def get_upload_url(
     complaint_id: str,
     content_type: str = "image/jpeg",
@@ -563,7 +563,7 @@ def get_upload_url(
 
 # ── 10. Append image to existing complaint ────────────────────────
 
-@router.patch("/complaints/{complaint_id}/images")
+@router.patch("/{complaint_id}/images")
 def append_complaint_image(
     complaint_id: str,
     file_url:     str,

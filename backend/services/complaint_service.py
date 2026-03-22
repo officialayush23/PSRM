@@ -48,7 +48,14 @@ def _translate_to_english(description: str, original_language: str) -> str:
             "Translate this complaint to English and return only translated text.\n"
             f"Language: {original_language}\nComplaint: {description}"
         )
-        response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config={
+                "max_output_tokens": 3060,
+                "temperature": 0.5,
+            },
+        )
         translated = (response.text or "").strip()
         if translated:
             return translated

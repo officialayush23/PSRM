@@ -34,9 +34,9 @@ def _ensure_vertex():
 def _call_gemini(system: str, prompt: str, max_tokens: int = 600, temperature: float = 0.2) -> str:
     _ensure_vertex()
     model = GenerativeModel(
-        "gemini-2.5-flash-preview-05-20",
+        "gemini-2.5-flash",
         system_instruction=system,
-        generation_config=GenerationConfig(temperature=temperature, max_output_tokens=max_tokens),
+        generation_config=GenerationConfig(temperature=temperature, max_output_tokens=3060),
     )
     return (model.generate_content(prompt).text or "").strip()
 

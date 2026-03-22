@@ -55,9 +55,9 @@ def _ensure_vertex():
 def _gemini_text(system: str, user: str, max_tokens: int = 1000) -> str:
     _ensure_vertex()
     model = GenerativeModel(
-        "gemini-2.0-flash-001",
+        "gemini-2.5-flash",
         system_instruction=system,
-        generation_config=GenerationConfig(temperature=0.3, max_output_tokens=max_tokens),
+        generation_config=GenerationConfig(temperature=0.3, max_output_tokens=3060),
     )
     return (model.generate_content(user).text or "").strip()
 
@@ -256,7 +256,7 @@ def get_daily_briefing(
         )
 
     return {
-        "narrative":     narrative,
+        "greeting": narrative, "narrative": narrative,
         "stats":         dict(stats) | {"overdue_tasks": overdue, "poor_surveys": poor},
         "stalled_count": int(stuck),
     }
@@ -381,7 +381,7 @@ def crm_chat(
         logger.error("CRM chat Gemini failed: %s", exc)
         reply = "I couldn't process that right now. Please try again."
 
-    return {"reply": reply, "has_db_context": bool(db_context)}
+    return {"answer": reply, "data": None, "has_db_context": bool(db_context)}
 
 
 # ══════════════════════════════════════════════════════════════
@@ -1015,3 +1015,302 @@ def get_officials(
     ).mappings().all()
 
     return [dict(r) | {"id": str(r["id"])} for r in rows]
+
+# ══════════════════════════════════════════════════════════════
+# USER MANAGEMENT — super_admin creates officials/workers/admins
+# ══════════════════════════════════════════════════════════════
+
+class CreateUserRequest(BaseModel):
+    email:              str
+    full_name:          str
+    role:               str              # official | admin | worker | contractor
+    department_id:      Optional[str]    = None
+    jurisdiction_id:    Optional[str]    = None
+    phone:              Optional[str]    = None
+    preferred_language: str              = "hi"
+    temp_password:      str              = "PSCrm@2025"   # user must change on first login
+
+
+class UpdateUserRequest(BaseModel):
+    full_name:          Optional[str]   = None
+    role:               Optional[str]   = None
+    department_id:      Optional[str]   = None
+    jurisdiction_id:    Optional[str]   = None
+    phone:              Optional[str]   = None
+    is_active:          Optional[bool]  = None
+
+
+@router.post("/users")
+def create_user(
+    body: CreateUserRequest,
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    """
+    Super admin creates a new official/worker/admin with a Firebase account.
+    Steps:
+      1. firebase_admin.auth.create_user(email, password, display_name)
+      2. INSERT INTO users with auth_uid = firebase_uid
+    The user receives a welcome email via Firebase (or admin shares temp password).
+    """
+    _require(current_user, {"super_admin"})
+
+    VALID_ROLES = {"official", "admin", "worker", "contractor", "super_admin"}
+    if body.role not in VALID_ROLES:
+        raise HTTPException(400, f"role must be one of: {VALID_ROLES}")
+
+    # Check email not already used
+    existing = db.execute(
+        text("SELECT id FROM users WHERE email=:email"),
+        {"email": body.email.lower().strip()},
+    ).first()
+    if existing:
+        raise HTTPException(409, "Email already exists in DB")
+
+    # 1. Create Firebase user
+    import firebase_admin.auth as fb_auth
+    try:
+        fb_user = fb_auth.create_user(
+            email=body.email.lower().strip(),
+            password=body.temp_password,
+            display_name=body.full_name,
+            email_verified=False,
+        )
+        firebase_uid = fb_user.uid
+    except fb_auth.EmailAlreadyExistsError:
+        # Firebase already has the user — find their UID and proceed
+        try:
+            fb_user = fb_auth.get_user_by_email(body.email.lower().strip())
+            firebase_uid = fb_user.uid
+        except Exception as exc:
+            raise HTTPException(400, f"Firebase error: {exc}")
+    except Exception as exc:
+        raise HTTPException(400, f"Could not create Firebase user: {exc}")
+
+    # 2. Resolve city from current super_admin
+    city_row = db.execute(
+        text("SELECT city_id FROM users WHERE id=CAST(:uid AS uuid)"),
+        {"uid": str(current_user.user_id)},
+    ).first()
+    city_id = str(city_row[0]) if city_row and city_row[0] else None
+
+    if not city_id:
+        # Fall back to first city
+        city_id = str(db.execute(text("SELECT id FROM cities LIMIT 1")).scalar())
+
+    # 3. Insert into users
+    import uuid as _uuid
+    new_user_id = str(_uuid.uuid4())
+    db.execute(
+        text("""
+            INSERT INTO users (
+                id, auth_uid, auth_provider, email, phone, full_name,
+                role, preferred_language, city_id, department_id, jurisdiction_id,
+                is_active, is_verified, twilio_opt_in, email_opt_in, metadata
+            ) VALUES (
+                CAST(:id   AS uuid),
+                :auth_uid, 'password',
+                :email, :phone, :full_name,
+                :role, :lang,
+                CAST(:city AS uuid),
+                CAST(:dept AS uuid),
+                CAST(:jur  AS uuid),
+                TRUE, FALSE, TRUE, TRUE,
+                '{}'::jsonb
+            )
+        """),
+        {
+            "id":       new_user_id,
+            "auth_uid": firebase_uid,
+            "email":    body.email.lower().strip(),
+            "phone":    body.phone or None,
+            "full_name":body.full_name,
+            "role":     body.role,
+            "lang":     body.preferred_language,
+            "city":     city_id,
+            "dept":     body.department_id or None,
+            "jur":      body.jurisdiction_id or None,
+        },
+    )
+
+    # 4. If worker/contractor, create the specialist row
+    if body.role == "worker":
+        db.execute(
+            text("""
+                INSERT INTO workers (user_id, department_id, skills, is_available)
+                VALUES (CAST(:uid AS uuid), CAST(:dept AS uuid), '{}'::text[], TRUE)
+            """),
+            {"uid": new_user_id, "dept": body.department_id or None},
+        )
+    elif body.role == "contractor":
+        db.execute(
+            text("""
+                INSERT INTO contractors (
+                    user_id, city_id, company_name, registration_number,
+                    registered_dept_ids
+                ) VALUES (
+                    CAST(:uid AS uuid), CAST(:city AS uuid),
+                    :name, :reg,
+                    '{}'::uuid[]
+                )
+            """),
+            {"uid": new_user_id, "city": city_id,
+             "name": body.full_name + " Contractors", "reg": "PENDING-" + new_user_id[-8:].upper()},
+        )
+
+    db.commit()
+
+    # 5. Generate password reset link so user can set their own password
+    reset_link = None
+    try:
+        reset_link = fb_auth.generate_password_reset_link(body.email.lower().strip())
+    except Exception:
+        pass  # not critical
+
+    return {
+        "user_id":     new_user_id,
+        "firebase_uid": firebase_uid,
+        "email":       body.email.lower().strip(),
+        "role":        body.role,
+        "temp_password": body.temp_password,
+        "reset_link":  reset_link,
+        "message":     f"User created. Share temp password '{body.temp_password}' or send reset link.",
+    }
+
+
+@router.patch("/users/{user_id}")
+def update_user(
+    user_id: UUID,
+    body: UpdateUserRequest,
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    """Update role, department, jurisdiction, is_active for any staff user."""
+    _require(current_user, {"super_admin", "admin"})
+
+    sets = []
+    params: Dict[str, Any] = {"uid": str(user_id)}
+    if body.full_name is not None:
+        sets.append("full_name=:full_name"); params["full_name"] = body.full_name
+    if body.role is not None:
+        sets.append("role=:role"); params["role"] = body.role
+    if body.department_id is not None:
+        sets.append("department_id=CAST(:dept_id AS uuid)"); params["dept_id"] = body.department_id
+    if body.jurisdiction_id is not None:
+        sets.append("jurisdiction_id=CAST(:jur_id AS uuid)"); params["jur_id"] = body.jurisdiction_id
+    if body.phone is not None:
+        sets.append("phone=:phone"); params["phone"] = body.phone or None
+    if body.is_active is not None:
+        sets.append("is_active=:is_active"); params["is_active"] = body.is_active
+
+    if not sets:
+        raise HTTPException(400, "Nothing to update")
+
+    sets.append("updated_at=NOW()")
+    db.execute(
+        text(f"UPDATE users SET {', '.join(sets)} WHERE id=CAST(:uid AS uuid)"),
+        params,
+    )
+
+    # If department changed and user is a worker, update workers table too
+    if body.department_id:
+        db.execute(
+            text("UPDATE workers SET department_id=CAST(:dept AS uuid) WHERE user_id=CAST(:uid AS uuid)"),
+            {"dept": body.department_id, "uid": str(user_id)},
+        )
+
+    db.commit()
+    return {"status": "updated", "user_id": str(user_id)}
+
+
+@router.get("/users")
+def list_staff_users(
+    role:    Optional[str]  = Query(default=None),
+    dept_id: Optional[UUID] = Query(default=None),
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    """List all staff users (officials, admins, workers, contractors)."""
+    _require(current_user, ADMIN_ROLES)
+
+    ctx_row = db.execute(
+        text("SELECT city_id FROM users WHERE id=CAST(:uid AS uuid)"),
+        {"uid": str(current_user.user_id)},
+    ).first()
+    city_id = str(ctx_row[0]) if ctx_row and ctx_row[0] else None
+
+    filters = ["u.city_id=CAST(:city_id AS uuid)", "u.role != 'citizen'"]
+    params: Dict[str, Any] = {"city_id": city_id}
+
+    if role:
+        filters.append("u.role=:role"); params["role"] = role
+    if dept_id:
+        filters.append("u.department_id=CAST(:dept_id AS uuid)"); params["dept_id"] = str(dept_id)
+
+    rows = db.execute(
+        text(f"""
+            SELECT u.id, u.full_name, u.email, u.phone, u.role,
+                   u.is_active, u.auth_uid, u.preferred_language,
+                   d.name AS dept_name, d.code AS dept_code,
+                   j.name AS jurisdiction_name,
+                   w.performance_score AS worker_score,
+                   w.current_task_count, w.is_available
+            FROM users u
+            LEFT JOIN departments  d ON d.id=u.department_id
+            LEFT JOIN jurisdictions j ON j.id=u.jurisdiction_id
+            LEFT JOIN workers      w ON w.user_id=u.id
+            WHERE {' AND '.join(filters)}
+            ORDER BY u.role, u.full_name
+            LIMIT 200
+        """),
+        params,
+    ).mappings().all()
+
+    return [
+        {
+            "id":               str(r["id"]),
+            "full_name":        r["full_name"],
+            "email":            r["email"],
+            "phone":            r["phone"],
+            "role":             r["role"],
+            "is_active":        r["is_active"],
+            "has_firebase_auth":bool(r["auth_uid"]),
+            "preferred_language":r["preferred_language"],
+            "dept_name":        r["dept_name"],
+            "dept_code":        r["dept_code"],
+            "jurisdiction_name":r["jurisdiction_name"],
+            "worker_score":     float(r["worker_score"]) if r["worker_score"] else None,
+            "current_task_count":r["current_task_count"],
+            "is_available":     r["is_available"],
+        }
+        for r in rows
+    ]
+
+
+@router.post("/users/{user_id}/deactivate")
+def deactivate_user(
+    user_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    """Deactivates user in DB AND disables in Firebase."""
+    _require(current_user, {"super_admin"})
+    auth_uid = db.execute(
+        text("SELECT auth_uid FROM users WHERE id=CAST(:uid AS uuid)"),
+        {"uid": str(user_id)},
+    ).scalar()
+
+    db.execute(
+        text("UPDATE users SET is_active=FALSE, updated_at=NOW() WHERE id=CAST(:uid AS uuid)"),
+        {"uid": str(user_id)},
+    )
+    db.commit()
+
+    if auth_uid:
+        try:
+            import firebase_admin.auth as fb_auth
+            fb_auth.update_user(auth_uid, disabled=True)
+        except Exception as exc:
+            logger.warning("Firebase disable failed for %s: %s", auth_uid, exc)
+
+    return {"status": "deactivated", "user_id": str(user_id)}

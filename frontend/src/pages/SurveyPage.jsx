@@ -82,7 +82,7 @@ export default function SurveyPage() {
       toast.error("Please provide a rating");
       return;
     }
-    if (survey.survey_type === "closing" && isResolved === null) {
+    if (survey.survey_type === "completion" && isResolved === null) {
       toast.error("Please indicate if the issue was resolved");
       return;
     }
@@ -170,7 +170,7 @@ export default function SurveyPage() {
     );
   }
 
-  const isClosing = survey.survey_type === "closing";
+  const isClosing = survey.survey_type === "completion";
   const infraIcon = INFRA_ICONS[survey.infra_type_code] || "📍";
 
   // ── Survey form ───────────────────────────────────────────────

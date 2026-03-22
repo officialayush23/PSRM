@@ -505,9 +505,9 @@ export default function WorkerDashboardPage() {
 
   return (
     <AppLayout title="My Tasks">
-      <div className="p-6 flex flex-col gap-6">
+      <div className="p-4 md:p-6 flex flex-col gap-6">
         {/* Header */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-black text-slate-900">
               Namaskar, {user.full_name?.split(" ")[0]} 🙏
@@ -523,7 +523,7 @@ export default function WorkerDashboardPage() {
         </div>
 
         {/* Stats row */}
-        <div className="grid grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
           {[
             { l:"Assigned",    v:counts.pending,     c:"#6366f1" },
             { l:"In Progress", v:counts.in_progress, c:"#f97316" },

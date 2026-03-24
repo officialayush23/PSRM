@@ -211,3 +211,90 @@ export async function fetchAdminTaskList({ status, deptId, limit = 50, offset = 
   const { data } = await client.get("/admin/tasks", { params });
   return data;
 }
+
+// ── Infra nodes / maps / alerts ──────────────────────────────────
+
+export async function fetchInfraNodes({ deptId, status, infraTypeCode, hasRepeat, limit = 50, offset = 0 } = {}) {
+  const params = { limit, offset };
+  if (deptId)        params.dept_id = deptId;
+  if (status)        params.status = status;
+  if (infraTypeCode) params.infra_type_code = infraTypeCode;
+  if (typeof hasRepeat === "boolean") params.has_repeat = hasRepeat;
+  const { data } = await client.get("/admin/infra-nodes", { params });
+  return data;
+}
+
+export async function fetchInfraNodeMap({ deptId, jurisdictionId, status, infraTypeCode, hasRepeat } = {}) {
+  const params = {};
+  if (deptId)         params.dept_id = deptId;
+  if (jurisdictionId) params.jurisdiction_id = jurisdictionId;
+  if (status)         params.status = status;
+  if (infraTypeCode)  params.infra_type_code = infraTypeCode;
+  if (typeof hasRepeat === "boolean") params.has_repeat = hasRepeat;
+  const { data } = await client.get("/infra/nodes/map", { params });
+  return data;
+}
+
+export async function fetchCriticalAlerts({ limit = 50, offset = 0 } = {}) {
+  const { data } = await client.get("/admin/critical-alerts", { params: { limit, offset } });
+  return data;
+}
+
+// ── Tender workflow ───────────────────────────────────────────────
+
+export async function fetchTenders({ status, deptId, limit = 50, offset = 0 } = {}) {
+  const params = { limit, offset };
+  if (status) params.status = status;
+  if (deptId) params.dept_id = deptId;
+  const { data } = await client.get("/admin/tenders", { params });
+  return data;
+}
+
+export async function createTender(body) {
+  const { data } = await client.post("/admin/tenders", body);
+  return data;
+}
+
+export async function approveTender(tenderId, body = {}) {
+  const { data } = await client.post(`/admin/tenders/${tenderId}/approve`, body);
+  return data;
+}
+
+export async function rejectTender(tenderId, body) {
+  const { data } = await client.post(`/admin/tenders/${tenderId}/reject`, body);
+  return data;
+}
+
+// ── Low-confidence routing / jurisdictions ───────────────────────
+
+export async function fetchLowConfidenceQueue({ limit = 50, offset = 0 } = {}) {
+  const { data } = await client.get("/admin/complaints/low-confidence", { params: { limit, offset } });
+  return data;
+}
+
+export async function fetchJurisdictions() {
+  const { data } = await client.get("/admin/jurisdictions");
+  return data;
+}
+
+// ── Infra node drilldowns ────────────────────────────────────────
+
+export async function fetchNodeHistory(nodeId) {
+  const { data } = await client.get(`/infra/nodes/${nodeId}/history`);
+  return data;
+}
+
+export async function fetchNodeRepeatIssues(nodeId) {
+  const { data } = await client.get(`/infra/nodes/${nodeId}/repeat-issues`);
+  return data;
+}
+
+// ── Workflow learning save ───────────────────────────────────────
+
+export async function saveWorkflowLearning(workflowInstanceId, { edit_reason, edited_steps } = {}) {
+  const { data } = await client.post(`/admin/workflows/${workflowInstanceId}/save-learning`, {
+    edit_reason,
+    edited_steps,
+  });
+  return data;
+}

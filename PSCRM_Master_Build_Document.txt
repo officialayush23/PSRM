@@ -1,0 +1,1609 @@
+PS-CRM
+
+Master Build Document — Codex-Ready Instructions
+
+Full Audit · Prioritized Build Order · Atomic Prompts
+
++-----------------------+-----------------------+-----------------------+
+| ✅ DONE               | 🔴 BROKEN             | 🚧 MISSING            |
+|                       |                       |                       |
+| Auth · Surveys ·      | mapping_confidence    | 30 backend endpoints  |
+| Worker Tasks          | crash CORS wildcard   | 8 shared components 5 |
+| Complaints API ·      | Complaint queue       | dashboard pages All   |
+| Public Map            | partially broken      | infra-node UI         |
+| Login/Signup · CRM    |                       |                       |
+| Chat                  |                       |                       |
++-----------------------+-----------------------+-----------------------+
+
+SECTION 1 · COMPLETE CURRENT STATE AUDIT
+
+Every file you shared has been reviewed. This section shows exactly what
+exists, what works, and what is missing so nothing is built twice or
+skipped by accident.
+
+1.1 Frontend Files — Status
+
+  --------------------------------------------------------------------------------
+  File / Component                        Status     Notes
+  --------------------------------------- ---------- -----------------------------
+  App.jsx                                 ⚠️ Partial Routes exist but missing
+                                                     /admin/infra-nodes/:nodeId,
+                                                     /worker, /super-admin
+
+  LoginPage.jsx                           ✅ Done    Complete — Firebase auth +
+                                                     backend sync
+
+  SignupPage.jsx                          ✅ Done    Complete — citizen only
+
+  PublicMapPage.jsx                       ✅ Done    Complete — 3D Mapbox,
+                                                     complaint pins
+
+  SurveyPage.jsx                          ✅ Done    Complete — star rating,
+                                                     resolve check, FCM ready
+
+  ComplaintStatusPage.jsx                 ⚠️ Partial Good base — needs Mapbox
+                                                     embed + survey pending banner
+
+  MyComplaintsPage.jsx                    ✅ Done    Complete — table + filters +
+                                                     stats
+
+  NotificationsPage.jsx                   ⚠️ Partial Works — survey tab pulls real
+                                                     data but banner needs
+                                                     improvement
+
+  ProfilePage.jsx                         ✅ Done    Complete — edit +
+                                                     notification prefs
+
+  DashboardPage.jsx                       ✅ Done    Uploaded but not shared —
+                                                     assumed working for citizens
+
+  SubmitComplaintPage.jsx                 ✅ Done    Uploaded but not shared —
+                                                     Mapbox pin picker referenced
+                                                     in build plan
+
+  pages/admin/OfficialDashboardPage.jsx   ❓ Unknown Referenced in App.jsx but NOT
+                                                     uploaded — verify or build
+                                                     fresh
+
+  pages/admin/AdminDashboardPage.jsx      ❓ Unknown Referenced in App.jsx but NOT
+                                                     uploaded — verify or build
+                                                     fresh
+
+  pages/admin/WorkerDashboardPage.jsx     ❓ Unknown Referenced in App.jsx but NOT
+                                                     uploaded — verify or build
+                                                     fresh
+
+  pages/admin/UserManagementPage.jsx      ❓ Unknown Referenced in App.jsx but NOT
+                                                     uploaded — verify or build
+                                                     fresh
+
+  pages/InfraNodeDetailPage.jsx           🚫 Missing Does not exist — new page
+                                                     needed (F7)
+
+  pages/WorkerPortalPage.jsx              🚫 Missing Does not exist — mobile-first
+                                                     worker UI (F6)
+
+  pages/SuperAdminDashboardPage.jsx       🚫 Missing Does not exist — needs
+                                                     building (F5)
+  --------------------------------------------------------------------------------
+
+1.2 Frontend Components & API — Status
+
+  ------------------------------------------------------------------------------------
+  File / Component                             Status     Notes
+  -------------------------------------------- ---------- ----------------------------
+  AppLayout.jsx                                ✅ Done    Clean — mobile sheet +
+                                                          desktop sidebar
+
+  SideNav.jsx                                  ⚠️ Partial Worker nav points to
+                                                          /dashboard — needs /worker
+                                                          route
+
+  TopBar.jsx                                   ✅ Done    Complete — search, bell,
+                                                          avatar
+
+  CRMAgentChat.jsx                             ✅ Done    Complete — floating chat,
+                                                          history, quick prompts, data
+                                                          tables
+
+  PageShell.jsx                                ✅ Stub    Minimal stub — fine to leave
+                                                          as is
+
+  api/client.js                                ✅ Done    Axios + Firebase token
+                                                          auto-refresh — correct
+
+  api/authApi.js                               ✅ Done    Complete — signup, login,
+                                                          logout, getMe, updateMe
+
+  api/complaintsApi.js                         ✅ Done    Complete — all complaint +
+                                                          geocoding functions
+
+  api/adminApi.js                              ⚠️ Partial Missing ~12 new functions:
+                                                          infra nodes, critical
+                                                          alerts, tenders,
+                                                          jurisdictions,
+                                                          low-confidence, workflow
+                                                          learning
+
+  components/InfraNodeCard.jsx                 🚫 Missing New shared component (F1)
+
+  components/CriticalAlertBadge.jsx            🚫 Missing New shared component (F1)
+
+  components/MapboxInfraLayer.jsx              🚫 Missing New shared component (F1) —
+                                                          critical for all dashboards
+
+  components/WorkflowRecommendationPanel.jsx   🚫 Missing New shared component (F1)
+
+  components/TaskUpdateModal.jsx               🚫 Missing New shared component (F1)
+
+  components/TenderApprovalCard.jsx            🚫 Missing New shared component (F1)
+
+  components/NodeHealthBar.jsx                 🚫 Missing New shared component (F1)
+
+  components/LowConfidenceTag.jsx              🚫 Missing New shared component (F1)
+
+  components/SurveyAutoTriggerBanner.jsx       🚫 Missing New shared component (F1)
+  ------------------------------------------------------------------------------------
+
+1.3 Backend — Status
+
+  -----------------------------------------------------------------------------
+  File / Component                      Status     Notes
+  ------------------------------------- ---------- ----------------------------
+  routes/auth_router.py                 ✅ Done    Complete — signup, login,
+                                                   me, updateMe
+
+  routes/survey_router.py               ✅ Done    Complete — get, submit,
+                                                   rollout, user/my
+
+  routes/worker_router.py               ✅ Done    Complete — list, detail,
+                                                   update with photos
+
+  routes/stats_router.py                ✅ Done    Complete — /stats/me
+
+  admin_router.py — KPI                 ✅ Done    Working
+
+  admin_router.py — CRM briefing/chat   ✅ Done    Gemini integrated
+
+  admin_router.py — complaint queue     🔴 Bug     c.mapping_confidence crash
+                                                   at lines 385, 454, 533
+
+  admin_router.py — workflow approve    ✅ Done    Working
+
+  admin_router.py — reroute             ✅ Done    Working
+
+  admin_router.py — task assign         ✅ Done    Working but missing 500m
+                                                   area notification
+
+  admin_router.py — users CRUD          ✅ Done    Working
+
+  admin_router.py — infra node          ✅ Done    Working
+  summary/AI                                       
+
+  main.py — CORS                        🔴 Bug     allow_origins=['*'] —
+                                                   wildcard, fix before deploy
+
+  routes/infra_router.py                🚫 Missing 5 endpoints for infra
+                                                   nodes + GeoJSON (P1-1)
+
+  routes/pubsub_router.py               🚫 Missing 4 push endpoints (P0-4)
+
+  Dockerfile                            🚫 Missing Cloud Run deployment file
+                                                   (P0-3)
+
+  admin_router.py — critical-alerts     🚫 Missing Warranty breach alert query
+                                                   (P1-2)
+
+  admin_router.py — tenders             🚫 Missing 4 tender endpoints (P1-3)
+
+  admin_router.py — low-confidence      🚫 Missing Manual routing queue (P1-4)
+  queue                                            
+
+  admin_router.py — jurisdictions list  🚫 Missing Simple list endpoint (P1-5)
+
+  admin_router.py — workflow learning   🚫 Missing Version save endpoint (P1-7)
+
+  admin_router.py — infra-nodes list    🚫 Missing Paginated list endpoint
+                                                   (P1-8)
+
+  notification_service.py —             🚫 Missing Template entry needed (H4)
+  TENDER_REJECTED                                  
+
+  config.py — PUBSUB_PUSH_SECRET        🚫 Missing Config field needed (H5)
+
+  scripts/bootstrap_firebase_staff.py   🚫 Missing One-time provisioning script
+                                                   (P2-3)
+
+  scripts/backfill_embeddings.py        🚫 Missing Nightly backfill script (H3)
+  -----------------------------------------------------------------------------
+
+SECTION 2 · KEY DECISIONS & IMPORTANT NOTES
+
+2.1 The 4 Unknown Admin Pages
+
+App.jsx imports OfficialDashboardPage, AdminDashboardPage,
+WorkerDashboardPage, and UserManagementPage from pages/admin/ — but
+these files were NOT included in your upload. Before giving any of these
+to Codex:
+
+-   Check if these files exist in your repo (ls
+    frontend/src/pages/admin/).
+
+-   If they exist: upload them so we can audit them and give targeted
+    enhancement instructions instead of a full rewrite.
+
+-   If they do NOT exist: the build plan instructions F3/F4/F8 apply as
+    full builds from scratch.
+
+-   WorkerDashboardPage is separate from WorkerPortalPage (F6).
+    WorkerDashboard is the /dashboard landing for workers. WorkerPortal
+    is the new full /worker task management page.
+
+2.2 Strict Codex Prompt Discipline
+
+Each numbered instruction below is ONE atomic Codex prompt. The rules
+are:
+
+-   Give Codex exactly ONE task at a time — one file, one endpoint, one
+    component.
+
+-   Always paste the full relevant existing code into the Codex context
+    for edits. Do not say 'in the existing file' without also pasting
+    the current content.
+
+-   After each step, test it before moving to the next. The order below
+    enforces dependencies.
+
+-   Never skip Phase 0 — if the mapping_confidence bug is not fixed
+    first, the complaint queue will crash and you won't be able to test
+    anything in the admin flow.
+
+2.3 Database Functions Already Exist
+
+Your final.sql confirms these PostgreSQL functions are already deployed
+— Codex should call them, not recreate them:
+
+-   
+-   
+-   
+-   
+-   
+
+2.4 SideNav Worker Route Gap
+
+WORKER_NAV in SideNav.jsx currently routes workers to /dashboard. After
+building WorkerPortalPage (F6), step F9 updates this to route to
+/worker. Do not fix SideNav before F6 is built and tested.
+
+2.5 OfficialDashboard vs AdminDashboard Scope
+
+An important distinction your instructions enforce:
+
+-   Officials see their department's data only. Workflow tab, task
+    assignment, low-confidence queue — all scoped to their dept.
+
+-   Admins see their entire department branch (all officials under
+    them).
+
+-   Super Admin sees city-wide data across all departments.
+
+-   The _get_user_scope() helper in admin_router.py already enforces
+    this at the query level — the frontend just needs to render the
+    right tabs for each role.
+
+SECTION 3 · COMPLETE CODEX BUILD ORDER
+
+Feed each numbered item to Codex as one atomic prompt. Complete and test
+each before proceeding. The execution order strictly respects
+dependencies.
+
+  ---- ------------- ------------------------------------- ------------------------------------- -----------
+  #    Step ID       What Codex Does                       File                                  Phase
+
+  1    P0-1          Fix mapping_confidence crash in       admin_router.py                       🔴 FIX
+                     complaint queue & single complaint                                          FIRST
+                     endpoints                                                                   
+
+  2    P0-2          Harden CORS — replace wildcard with   main.py                               🔴 FIX
+                     env-based origins                                                           FIRST
+
+  3    P0-3          Create Dockerfile + .dockerignore for Dockerfile (new)                      🔴 FIX
+                     Cloud Run                                                                   FIRST
+
+  4    H4            Add TENDER_REJECTED notification      notification_service.py               🔧 Prereq
+                     template                                                                    
+
+  5    H5            Add PUBSUB_PUSH_SECRET optional field config.py                             🔧 Prereq
+                     to Settings                                                                 
+
+  6    P0-4          Create pubsub_router.py — 4 push      pubsub_router.py (new)                🔧 Prereq
+                     webhook routes                                                              
+
+  7    P1-1          Create infra_router.py — 5 infra node infra_router.py (new)                 🗺️ Core
+                     endpoints incl. GeoJSON                                                     
+
+  8    P1-8          Add GET /admin/infra-nodes list       admin_router.py                       🗺️ Core
+                     endpoint                                                                    
+
+  9    P1-2          Add GET /admin/critical-alerts        admin_router.py                       🗺️ Core
+                     endpoint                                                                    
+
+  10   P1-3          Add 4 tender endpoints (list, create, admin_router.py                       🗺️ Core
+                     approve, reject)                                                            
+
+  11   P1-4          Add GET                               admin_router.py                       🗺️ Core
+                     /admin/complaints/low-confidence                                            
+                     endpoint                                                                    
+
+  12   P1-5          Add GET /admin/jurisdictions list     admin_router.py                       🗺️ Core
+                     endpoint                                                                    
+
+  13   P1-6          Wire 500m area notification after     admin_router.py                       🗺️ Core
+                     task assignment commit                                                      
+
+  14   P1-7          Add POST                              admin_router.py                       🗺️ Core
+                     /admin/workflows/{id}/save-learning                                         
+                     endpoint                                                                    
+
+  15   P2-1          Auto-trigger survey via Pub/Sub on    worker_router.py                      🤖 Agent
+                     task complete                                                               
+
+  16   P2-2          Replace NULL mapping_confidence with  admin_router.py                       🤖 Agent
+                     agent_logs subquery                                                         
+
+  17   P2-3          Create Firebase staff bootstrap       scripts/bootstrap_firebase_staff.py   🤖 Agent
+                     script                                (new)                                 
+
+  18   F0            Add 12 new functions to adminApi.js   api/adminApi.js                       🎨 Frontend
+
+  19   F1-a          Build InfraNodeCard + NodeHealthBar + components/ (new)                     🎨 Frontend
+                     LowConfidenceTag                                                            
+
+  20   F1-b          Build CriticalAlertBadge +            components/ (new)                     🎨 Frontend
+                     SurveyAutoTriggerBanner                                                     
+
+  21   F1-c          Build MapboxInfraLayer (GeoJSON       components/ (new)                     🎨 Frontend
+                     source + 3D + hover)                                                        
+
+  22   F1-d          Build WorkflowRecommendationPanel +   components/ (new)                     🎨 Frontend
+                     TaskUpdateModal                                                             
+
+  23   F1-e          Build TenderApprovalCard              components/ (new)                     🎨 Frontend
+
+  24   F6            Build WorkerPortalPage (mobile-first, pages/WorkerPortalPage.jsx (new)      🎨 Frontend
+                     task list + detail + update)                                                
+
+  25   F7            Build InfraNodeDetailPage             pages/InfraNodeDetailPage.jsx (new)   🎨 Frontend
+
+  26   F2            Enhance ComplaintStatusPage +         existing pages                        🎨 Frontend
+                     NotificationsPage                                                           
+
+  27   F3            Build OfficialDashboardPage (6 tabs)  pages/admin/ (new or rewrite)         🎨 Frontend
+
+  28   F4            Build AdminDashboardPage (5 tabs)     pages/admin/ (new or rewrite)         🎨 Frontend
+
+  29   F5            Build SuperAdminDashboardPage (6      pages/SuperAdminDashboardPage.jsx     🎨 Frontend
+                     tabs)                                 (new)                                 
+
+  30   F8            Enhance UserManagementPage with       pages/admin/ (enhance)                🎨 Frontend
+                     JurisdictionSelector + Firebase auth                                        
+                     status                                                                      
+
+  31   F9            Update App.jsx routes + SideNav       App.jsx + SideNav.jsx                 🎨 Frontend
+                     worker route                                                                
+
+  32   H1            Tailwind class cleanup pass           frontend/                             🧰 Harden
+
+  33   H2            Add startup schema compatibility      main.py                               🧰 Harden
+                     check                                                                       
+
+  34   H3            Create embedding backfill nightly     scripts/backfill_embeddings.py (new)  🧰 Harden
+                     script                                                                      
+  ---- ------------- ------------------------------------- ------------------------------------- -----------
+
+SECTION 4 · ATOMIC CODEX PROMPTS
+
+Each box below is one complete Codex prompt. Copy the numbered
+instructions exactly. Codex performs best when given a single file and a
+specific list of changes.
+
+PHASE 0 — Fix Blockers (Steps 1–6)
+
+Nothing in the admin flow works reliably until these are done. Do NOT
+skip.
+
+  -------------------- ------------------------------------------------------------------
+  STEP 1 · P0-1 Fix    
+  mapping_confidence   
+  crash in             
+  admin_router.py      
+
+  FILE                 backend/routes/admin_router.py
+
+  1                    In get_complaint_queue(): find the SELECT block inside the rows =
+                       db.execute(text(f""" call. Remove the line c.mapping_confidence,
+                       from the SELECT list completely.
+
+  2                    In the _fmt() helper function inside get_complaint_queue(): find
+                       the line d["mapping_confidence"] = float(r["mapping_confidence"])
+                       if r["mapping_confidence"] else None and replace it with:
+                       d["mapping_confidence"] = None
+
+  3                    In get_complaint_admin(): find the SELECT query for a single
+                       complaint — remove c.mapping_confidence, from it. In the return
+                       dict, change the mapping_confidence value to None (remove the
+                       float cast).
+
+  4                    Add this comment above both changed sections: # mapping_confidence
+                       lives in agent_logs — will be added via subquery in Step 16 (P2-2)
+
+  5                    Save the file. Restart the server. Test GET
+                       /admin/complaints/queue — it must return 200 with no 500 error.
+  -------------------- ------------------------------------------------------------------
+
+  --------- ------------------------------------------------------------------
+  STEP 2 ·  
+  P0-2      
+  Harden    
+  CORS in   
+  main.py   
+
+  FILE      backend/main.py
+
+  1         Add import os at the top of the file (after other imports).
+
+  2         Find the CORSMiddleware block. Replace allow_origins=["*"] with:
+
+  3         allow_origins=["http://localhost:5173", "http://localhost:3000",
+            os.getenv("FRONTEND_URL", "http://localhost:5173")]
+
+  4         Keep allow_credentials=True, allow_methods=["*"],
+            allow_headers=["*"] unchanged.
+  --------- ------------------------------------------------------------------
+
+  --------------- ------------------------------------------------------------------
+  STEP 3 · P0-3   
+  Create          
+  Dockerfile +    
+  .dockerignore   
+  for Cloud Run   
+
+  FILE            backend/Dockerfile (create new)
+
+  1               Create backend/Dockerfile with exactly this content: FROM
+                  python:3.11-slim WORKDIR /app COPY requirements.txt . RUN pip
+                  install --no-cache-dir -r requirements.txt COPY . . ENV PORT=8080
+                  EXPOSE 8080 CMD ["uvicorn", "main:app", "--host", "0.0.0.0",
+                  "--port", "8080", "--workers", "2"]
+
+  2               Create backend/.dockerignore with: __pycache__ / *.pyc / .env /
+                  data/uploads / data/embeddings / serviceAccountKey.json (one per
+                  line)
+  --------------- ------------------------------------------------------------------
+
+  ----------------- ------------------------------------------------------------------
+  STEP 4 · H4 Add   
+  TENDER_REJECTED   
+  notification      
+  template          
+
+  FILE              backend/services/notification_service.py
+
+  1                 Find the TEMPLATES dict. Add a new entry after the last existing
+                    template:
+
+  2                 "TENDER_REJECTED": { with keys: title_en: 'Tender Rejected',
+                    body_en: 'Your tender #{number} has been rejected. Reason:
+                    {reason}.', title_hi: 'टेंडर अस्वीकृत', body_hi: 'आपका टेंडर #{number}
+                    अस्वीकृत हो गया है। कारण: {reason}।'
+  ----------------- ------------------------------------------------------------------
+
+  -------------------- ------------------------------------------------------------------
+  STEP 5 · H5 Add      
+  PUBSUB_PUSH_SECRET   
+  config field         
+
+  FILE                 backend/config.py
+
+  1                    In the Settings class (Pydantic BaseSettings), add:
+                       PUBSUB_PUSH_SECRET: Optional[str] = None
+
+  2                    Make sure Optional is imported from typing.
+  -------------------- ------------------------------------------------------------------
+
+  ------------------ ------------------------------------------------------------------
+  STEP 6 · P0-4      
+  Create             
+  pubsub_router.py — 
+  GCP Pub/Sub push   
+  webhooks           
+
+  FILE               backend/routes/pubsub_router.py (create new)
+
+  1                  Create the file with router prefix /pubsub. Import: APIRouter,
+                     Depends, Request, HTTPException, base64, json, get_db, text,
+                     Session, logger, dispatch_notification, settings.
+
+  2                  Add a helper verify_push_secret(request) that checks the
+                     Authorization header Bearer token against
+                     settings.PUBSUB_PUSH_SECRET. If the secret is set and doesn't
+                     match, raise 403. If not set, skip check.
+
+  3                  Add a helper decode_pubsub_message(body_dict) that reads
+                     body_dict["message"]["data"], base64-decodes it, and parses as
+                     JSON. Returns the dict.
+
+  4                  POST /pubsub/complaint-received: decode payload, get
+                     complaint_id/infra_node_id/is_repeat. If is_repeat=true, query all
+                     officials in complaint's department and call dispatch_notification
+                     with event_type=REPEAT_COMPLAINT_ALERT. INSERT into
+                     pubsub_event_log (topic_name='ps-crm-complaints', event_type,
+                     entity_id=complaint_id, status='processed').
+
+  5                  POST /pubsub/workflow-events: decode payload, get
+                     workflow_instance_id/event_type/step_number/total_steps. If
+                     event_type=='WORKFLOW_STEP_COMPLETED' and step_number ==
+                     total_steps // 2, INSERT into cloud_task_schedule
+                     (task_type='TRIGGER_SURVEY', workflow_instance_id,
+                     scheduled_for=NOW()+24h, status='scheduled'). Log to
+                     pubsub_event_log.
+
+  6                  POST /pubsub/notifications: decode payload, get
+                     user_id/event_type/variables/data. Call dispatch_notification. Log
+                     to pubsub_event_log.
+
+  7                  POST /pubsub/surveys: decode payload, get
+                     complaint_id/survey_type/workflow_instance_id. Look up citizen_id
+                     from complaints. Get template_id from survey_templates where
+                     type=survey_type. INSERT into survey_instances (status='pending',
+                     expires_at=NOW()+7days, triggered_by='agent').
+                     dispatch_notification with MIDWAY_SURVEY or COMPLAINT_RESOLVED
+                     based on survey_type. Log to pubsub_event_log.
+
+  8                  In main.py: import pubsub_router and add
+                     app.include_router(pubsub_router.router).
+  ------------------ ------------------------------------------------------------------
+
+PHASE 1 — Missing Core APIs (Steps 7–14)
+
+  ----------------- ------------------------------------------------------------------
+  STEP 7 · P1-1     
+  Create            
+  infra_router.py — 
+  5 infra node      
+  endpoints         
+
+  FILE              backend/routes/infra_router.py (create new)
+
+  1                 Create the file with prefix /infra. Imports: APIRouter, Depends,
+                    Query, HTTPException, Session, get_db, get_current_user,
+                    TokenData, text, Optional, List, UUID.
+
+  2                 GET /infra/nodes (paginated, dept-scoped): params: dept_id,
+                    jurisdiction_id, status, infra_type_code, has_repeat (bool),
+                    limit=50, offset=0. Require official/admin/super_admin. Query:
+                    infra_nodes n JOIN infra_types it JOIN jurisdictions j, scoped to
+                    user's city_id. If has_repeat=True filter: n.last_resolved_at IS
+                    NOT NULL AND NOW()-n.last_resolved_at < (it.repeat_alert_years||'
+                    years')::INTERVAL. Include open_complaint_count subquery and
+                    latest health_score from asset_health_logs. Return paginated list.
+
+  3                 GET /infra/nodes/map (GeoJSON FeatureCollection): same scoping, no
+                    pagination. Return type: FeatureCollection with Point geometry per
+                    node. Properties: id, status, infra_type_code, infra_type_name,
+                    total_complaint_count, open_complaint_count, is_repeat_risk (bool:
+                    last_resolved_at IS NOT NULL AND in window), health_score.
+
+  4                 GET /infra/nodes/{node_id}/history: return full complaint timeline
+                    for the node (complaint_number, title, status, priority,
+                    created_at, resolved_at, is_repeat_complaint, assigned_contractor
+                    from contractors via tasks, assigned_worker full_name) plus all
+                    past workflow_instances (id, status, completed_at).
+
+  5                 GET /infra/nodes/{node_id}/repeat-issues: call SELECT * FROM
+                    fn_check_repeat_complaint(CAST(:nid AS uuid)) and return the
+                    result. Also return last_contractor details (id, company_name,
+                    registration_number) from contractors joined via the most recent
+                    resolved task that had a contractor assigned.
+
+  6                 POST /infra/nodes/create-or-match: body: lat, lng, infra_type_id,
+                    city_id, name. Call fn_find_infra_node_for_cluster. If match found
+                    return {matched: true, node_id}. If no match INSERT into
+                    infra_nodes and return {matched: false, node_id: new_id}. Require
+                    official/admin/super_admin.
+
+  7                 In main.py: import infra_router and add
+                    app.include_router(infra_router.router).
+  ----------------- ------------------------------------------------------------------
+
+  -------------------- ------------------------------------------------------------------
+  STEP 8 · P1-8 Add    
+  GET                  
+  /admin/infra-nodes   
+  list endpoint        
+
+  FILE                 backend/routes/admin_router.py
+
+  1                    Add this endpoint BEFORE the existing
+                       /admin/infra-nodes/{node_id}/summary route to avoid route
+                       conflicts.
+
+  2                    GET /admin/infra-nodes: params: dept_id, status, infra_type_code,
+                       has_repeat_risk (bool), limit=50, offset=0. Require ADMIN_ROLES.
+
+  3                    Query infra_nodes scoped to user's city_id. JOIN infra_types it,
+                       LEFT JOIN jurisdictions j. Include open_complaint_count as inline
+                       subquery. If has_repeat_risk=True: filter n.last_resolved_at IS
+                       NOT NULL AND NOW()-n.last_resolved_at < (it.repeat_alert_years||'
+                       years')::INTERVAL. Return paginated list with total count.
+  -------------------- ------------------------------------------------------------------
+
+  ------------------------ ------------------------------------------------------------------
+  STEP 9 · P1-2 Add GET    
+  /admin/critical-alerts   
+  endpoint                 
+
+  FILE                     backend/routes/admin_router.py
+
+  1                        Add this endpoint after the infra node AI summary endpoint.
+
+  2                        GET /admin/critical-alerts: params: limit=50, offset=0. Require
+                           official/admin/super_admin. Use _get_user_scope.
+
+  3                        Use the exact SQL query from the build plan — it joins
+                           infra_nodes, infra_types, jurisdictions, complaints (where
+                           is_repeat_complaint=TRUE and status NOT IN
+                           resolved/closed/rejected), uses a LATERAL subquery to find the
+                           last contractor from the last resolved task, and joins
+                           contractors. Filter: n.last_resolved_at IS NOT NULL AND in
+                           warranty window AND n.city_id = scope city.
+
+  4                        Return all fields including liable_contractor_flag (true if
+                           contractor_id is not null).
+  ------------------------ ------------------------------------------------------------------
+
+  ----------- ------------------------------------------------------------------
+  STEP 10 ·   
+  P1-3 Add 4  
+  tender      
+  endpoints   
+
+  FILE        backend/routes/admin_router.py
+
+  1           GET /admin/tenders: filter by status (optional), dept_id
+              (optional). Role scoping: admin sees their dept, super_admin sees
+              all city tenders. JOIN tasks, users, departments for extra display
+              fields. Return list.
+
+  2           POST /admin/tenders: body: task_id, title, description,
+              scope_of_work, estimated_cost. Require official role only. Get
+              city_code from cities table. Generate tender_number via SELECT
+              fn_generate_tender_number(:city_code, 0). Set status='submitted',
+              submitted_by=current_user.user_id. INSERT into tenders. INSERT
+              into domain_events with event_type='TENDER_SUBMITTED'. Return new
+              tender.
+
+  3           POST /admin/tenders/{tender_id}/approve: body: reason (optional).
+              If role==admin: set admin_approved_by, admin_approved_at,
+              status='admin_approved'. If role==super_admin: verify current
+              status=='admin_approved' (raise 400 otherwise), then set
+              super_admin_approved_by, super_admin_approved_at,
+              status='super_admin_approved'. Log to domain_events.
+
+  4           POST /admin/tenders/{tender_id}/reject: body: reason (required).
+              Allow admin or super_admin. Set status='rejected',
+              rejection_reason=body.reason. Log to domain_events. Call
+              dispatch_notification for the submitted_by user with
+              event_type=TENDER_REJECTED.
+  ----------- ------------------------------------------------------------------
+
+  ---------------------------------- ------------------------------------------------------------------
+  STEP 11 · P1-4 Add GET             
+  /admin/complaints/low-confidence   
+  endpoint                           
+
+  FILE                               backend/routes/admin_router.py
+
+  1                                  Add this endpoint. Params: limit=50, offset=0. Require
+                                     official/admin/super_admin. Use scope.
+
+  2                                  WHERE clause: (c.agent_suggested_dept_ids = '{}' OR
+                                     array_length(c.agent_suggested_dept_ids,1) IS NULL) AND c.status
+                                     IN ('received','mapped') AND c.workflow_instance_id IS NULL AND
+                                     c.is_deleted=FALSE AND c.created_at < NOW() - INTERVAL '2 hours'.
+                                     Apply city/dept scope.
+
+  3                                  Return same fields as the complaint queue (same _fmt function).
+                                     Include total count.
+  ---------------------------------- ------------------------------------------------------------------
+
+  ---------------------- ------------------------------------------------------------------
+  STEP 12 · P1-5 Add GET 
+  /admin/jurisdictions   
+  list endpoint          
+
+  FILE                   backend/routes/admin_router.py
+
+  1                      Add GET /admin/jurisdictions. Require any logged-in admin role.
+
+  2                      Query: SELECT id, name, code, city_id FROM jurisdictions WHERE
+                         city_id = CAST(:city_id AS uuid) ORDER BY name. Get city_id from
+                         _get_user_scope.
+
+  3                      Return list of {id, name, code}.
+  ---------------------- ------------------------------------------------------------------
+
+  -------------- ------------------------------------------------------------------
+  STEP 13 · P1-6 
+  Wire 500m area 
+  notification   
+  on task        
+  assignment     
+
+  FILE           backend/routes/admin_router.py
+
+  1              Find the task assign endpoint (POST
+                 /admin/tasks/{task_id}/assign). Before the notification block,
+                 retrieve task_number and complaint_id from the task record.
+
+  2              After the db.commit() succeeds, add a try/except block that: (1)
+                 queries c.location via JOIN tasks t JOIN complaints c WHERE
+                 t.id=task_id LIMIT 1. (2) If location found, calls SELECT user_id
+                 FROM fn_get_area_subscribers(CAST(:loc AS geometry), 500). (3) For
+                 each subscriber, calls dispatch_notification with
+                 event_type=WORKFLOW_STARTED, variables={number: task_number, eta:
+                 'as per schedule'}, data={task_id, complaint_id}.
+
+  3              Wrap in try/except Exception as e: logger.warning('Area
+                 notification failed: %s', e) — failure must NOT crash the
+                 assignment.
+  -------------- ------------------------------------------------------------------
+
+  ------------------------------------- ------------------------------------------------------------------
+  STEP 14 · P1-7 Add POST               
+  /admin/workflows/{id}/save-learning   
+
+  FILE                                  backend/routes/admin_router.py
+
+  1                                     POST /admin/workflows/{workflow_instance_id}/save-learning: body:
+                                        edit_reason: str, edited_steps: List[Dict]. Require
+                                        official/admin.
+
+  2                                     Fetch the workflow_instance and its linked
+                                        workflow_template_version (JOIN). Get current version number.
+
+  3                                     INSERT into workflow_template_versions: is_active=True,
+                                        is_latest_version=True, previous_version_id=current version id,
+                                        version=current_version+1, situation_summary=edit_reason. Set
+                                        is_latest_version=False on the old version.
+
+  4                                     For each step in edited_steps, INSERT into workflow_template_steps
+                                        linked to the new version id.
+
+  5                                     UPDATE workflow_templates: INCREMENT times_used by 1, SET
+                                        last_used_at=NOW(), APPEND complaint_ids from this
+                                        workflow_instance to source_complaint_ids array.
+
+  6                                     Return {saved: true, new_version_id: uuid, version_number: int}.
+  ------------------------------------- ------------------------------------------------------------------
+
+PHASE 2 — Agentic & Scripts (Steps 15–17)
+
+  -------------- ------------------------------------------------------------------
+  STEP 15 · P2-1 
+  Auto-trigger   
+  end survey     
+  from task      
+  completion     
+
+  FILE           backend/routes/worker_router.py
+
+  1              Find the update_task endpoint. Find the block that handles
+                 update_type == 'complete' or status == 'completed'. After the
+                 db.commit() call, add:
+
+  2              from services.pubsub_service import publish_event — import at top
+                 of file instead of inline for cleanliness.
+
+  3              If task["workflow_step_instance_id"] is not None, call
+                 publish_event("ps-crm-surveys", {"event_type":
+                 "TRIGGER_END_SURVEY", "complaint_id": str(task["complaint_id"]),
+                 "workflow_instance_id": str(task["workflow_step_instance_id"]),
+                 "survey_type": "completion"}). Wrap in try/except and log warning
+                 on failure.
+
+  4              In pubsub_router.py (built in Step 6), update the
+                 /pubsub/workflow-events handler: when
+                 event_type=='WORKFLOW_STEP_COMPLETED' and step_number ==
+                 total_steps // 2 (midpoint), also publish to ps-crm-surveys topic
+                 with survey_type='midway'.
+  -------------- ------------------------------------------------------------------
+
+  -------------------- ------------------------------------------------------------------
+  STEP 16 · P2-2       
+  Replace NULL         
+  mapping_confidence   
+  with agent_logs      
+  subquery             
+
+  FILE                 backend/routes/admin_router.py
+
+  1                    In both get_complaint_queue() and get_complaint_admin(), find the
+                       SELECT blocks where mapping_confidence was set to NULL (added in
+                       Step 1). Replace the NULL placeholder with this subquery added to
+                       the SELECT list:
+
+  2                    (SELECT (payload->>'confidence')::float FROM agent_logs WHERE
+                       entity_id = c.id AND event_type = 'DEPT_MAPPED' ORDER BY
+                       created_at DESC LIMIT 1) AS mapping_confidence
+
+  3                    In the _fmt() helper, update the mapping_confidence line back to:
+                       d["mapping_confidence"] = float(r["mapping_confidence"]) if
+                       r["mapping_confidence"] else None
+
+  4                    Remove the TODO comment added in Step 1.
+  -------------------- ------------------------------------------------------------------
+
+  ----------- ------------------------------------------------------------------
+  STEP 17 ·   
+  P2-3        
+  Firebase    
+  staff       
+  bootstrap   
+  script      
+
+  FILE        backend/scripts/bootstrap_firebase_staff.py (create new)
+
+  1           Script entry point with argparse. Add --dry-run flag.
+
+  2           Connect to DB using DATABASE_URL from .env (use python-dotenv).
+              Query: SELECT id, email, full_name, role FROM users WHERE auth_uid
+              IS NULL AND role != 'citizen' AND email IS NOT NULL.
+
+  3           For each user (unless --dry-run): call
+              firebase_admin.auth.create_user(email, password='PSCrm@2025',
+              display_name=full_name, email_verified=False). Catch
+              EmailAlreadyExistsError: call get_user_by_email instead.
+
+  4           UPDATE users SET auth_uid = firebase_uid WHERE id = user.id. Print
+              progress per user.
+
+  5           Print totals at end: provisioned/skipped/errors. --dry-run prints
+              what would happen without making Firebase calls.
+  ----------- ------------------------------------------------------------------
+
+PHASE 3 — Frontend API Client (Step 18)
+
+  ------------- ------------------------------------------------------------------
+  STEP 18 · F0  
+  Add 12 new    
+  functions to  
+  adminApi.js   
+
+  FILE          frontend/src/api/adminApi.js
+
+  1             Add these exports alongside existing ones (do NOT remove anything
+                existing):
+
+  2             fetchInfraNodes: GET /admin/infra-nodes with params
+
+  3             fetchInfraNodeMap: GET /infra/nodes/map with params
+
+  4             fetchCriticalAlerts: GET /admin/critical-alerts with params
+
+  5             fetchTenders: GET /admin/tenders with params
+
+  6             createTender: POST /admin/tenders with body
+
+  7             approveTender: POST /admin/tenders/{id}/approve with body
+
+  8             rejectTender: POST /admin/tenders/{id}/reject with body
+
+  9             fetchLowConfidenceQueue: GET /admin/complaints/low-confidence with
+                params
+
+  10            fetchJurisdictions: GET /admin/jurisdictions — no params
+
+  11            fetchNodeHistory: GET /infra/nodes/{id}/history
+
+  12            fetchNodeRepeatIssues: GET /infra/nodes/{id}/repeat-issues
+
+  13            saveWorkflowLearning: POST /admin/workflows/{id}/save-learning
+                with body {edit_reason, edited_steps}
+  ------------- ------------------------------------------------------------------
+
+PHASE 4 — Shared Components (Steps 19–23)
+
+Build each component in a separate Codex session. All go in
+frontend/src/components/.
+
+  ------------------ ------------------------------------------------------------------
+  STEP 19 · F1-a     
+  Build              
+  InfraNodeCard +    
+  NodeHealthBar +    
+  LowConfidenceTag   
+
+  FILE               frontend/src/components/ (3 new files)
+
+  1                  InfraNodeCard.jsx: Props: node (object), onSelect (callback).
+                     Show: infra type icon (use Material Symbols mapped by
+                     infra_type_code), status badge (operational=green, damaged=red,
+                     under_repair=yellow Tailwind colors), complaint count,
+                     jurisdiction_name, repeat risk warning (orange exclamation if
+                     is_repeat_risk), NodeHealthBar. On click: call onSelect(node).
+
+  2                  NodeHealthBar.jsx: Props: score (0-10). A horizontal div with
+                     relative/absolute positioning. Width = (score/10)*100%. Color:
+                     score<=3 bg-red-500, score<=6 bg-amber-400, else bg-emerald-500.
+                     Show numeric score label on the right.
+
+  3                  LowConfidenceTag.jsx: Props: none. A small inline badge: red
+                     background, white text 'Needs Routing', with a material symbol
+                     'alt_route' icon before text. Render as a <span> with Tailwind.
+  ------------------ ------------------------------------------------------------------
+
+  ------------------------- ------------------------------------------------------------------
+  STEP 20 · F1-b Build      
+  CriticalAlertBadge +      
+  SurveyAutoTriggerBanner   
+
+  FILE                      frontend/src/components/ (2 new files)
+
+  1                         CriticalAlertBadge.jsx: Props: alert (object), onView (callback).
+                            Red-bordered card showing: infra_type_name, days_since_resolution
+                            in bold red, liable_contractor name (or 'No contractor — manual
+                            action required' if null), new_complaint_number, priority badge.
+                            Footer button 'View Node' calls onView(alert.node_id).
+
+  2                         SurveyAutoTriggerBanner.jsx: Props: surveyCount (int), onNavigate
+                            (callback). A yellow dismissable banner (bg-amber-50
+                            border-amber-300). Shows bell icon + '{surveyCount} survey(s)
+                            awaiting your response'. 'Fill Survey' button calls onNavigate().
+                            X button dismisses the banner (local useState). Render nothing if
+                            surveyCount is 0.
+  ------------------------- ------------------------------------------------------------------
+
+  ------------------ ------------------------------------------------------------------
+  STEP 21 · F1-c     
+  Build              
+  MapboxInfraLayer — 
+  GeoJSON infra      
+  nodes on Mapbox    
+
+  FILE               frontend/src/components/MapboxInfraLayer.jsx (new)
+
+  1                  Import: Map, Source, Layer, Popup, NavigationControl from
+                     react-map-gl. Accept props: nodes (GeoJSON FeatureCollection from
+                     /infra/nodes/map), onNodeClick (callback), filterStatus
+                     (optional), filterInfraType (optional).
+
+  2                  Render the Map with 3D buildings layer (id: '3d-buildings', type:
+                     fill-extrusion, source: composite, source-layer: building, filter:
+                     ['==','extrude','true'], fill-extrusion-color interpolated by
+                     height, fill-extrusion-height: ['get','height'], opacity 0.6,
+                     minzoom 12).
+
+  3                  Render a Source with id='infra-nodes' type='geojson' data={nodes}.
+                     Add a Layer for circle markers. Circle color: match on status:
+                     operational=#10b981, damaged=#ef4444, under_repair=#f59e0b,
+                     default=#6b7280. Circle radius: use a step expression based on
+                     total_complaint_count: [1-5]=6, [6-20]=9, [20+]=13.
+
+  4                  On hover over a circle: show a Popup with InfraNodeCard (import
+                     it). Use onMouseEnter/onMouseLeave events on the layer via
+                     map.on('mouseenter', 'infra-nodes', ...). Store hovered feature in
+                     useState.
+
+  5                  On click over a circle: call onNodeClick(feature.properties.id).
+                     Also change cursor to pointer on hover.
+
+  6                  The Map initialViewState should default to Delhi (lng: 77.209,
+                     lat: 28.6139, zoom: 11, pitch: 45, bearing: -10). Accept
+                     mapboxToken from import.meta.env.VITE_MAPBOX_TOKEN.
+  ------------------ ------------------------------------------------------------------
+
+  ------------------------------- ------------------------------------------------------------------
+  STEP 22 · F1-d Build            
+  WorkflowRecommendationPanel +   
+  TaskUpdateModal                 
+
+  FILE                            frontend/src/components/ (2 new files)
+
+  1                               WorkflowRecommendationPanel.jsx: Props: suggestions (array),
+                                  onSelect (callback with template_id, version_id), onEditAndSelect
+                                  (callback). Show top 3 as cards. Each card: template name bold,
+                                  situation_summary in gray, steps_count + times_used badges, 'Use
+                                  This' button (calls onSelect) and 'Edit Before Using' button
+                                  (calls onEditAndSelect). If suggestions is empty, show 'No
+                                  workflow suggestions available — create a custom workflow.'
+
+  2                               TaskUpdateModal.jsx: Props: task (object), isOpen (bool), onClose
+                                  (callback), onSubmit (callback with FormData). A modal overlay
+                                  (fixed inset-0 bg-black/50 z-50). Inside: a 3-tab interface. Tab 1
+                                  'Before Photo': file input + camera icon button + image preview.
+                                  Tab 2 'Progress Note': textarea for notes + optional photo upload.
+                                  Tab 3 'Complete': after photo upload + completion notes + confirm
+                                  button. Each tab submit calls onSubmit(formData) with the
+                                  appropriate update_type field ('before_photo', 'progress',
+                                  'completion'). Show existing task photos in a thumbnail strip at
+                                  the top.
+  ------------------------------- ------------------------------------------------------------------
+
+  -------------------- ------------------------------------------------------------------
+  STEP 23 · F1-e Build 
+  TenderApprovalCard   
+
+  FILE                 frontend/src/components/TenderApprovalCard.jsx (new)
+
+  1                    Props: tender (object), userRole (string), onApprove (callback),
+                       onReject (callback).
+
+  2                    Show: tender_number in monospace, title bold, estimated_cost
+                       formatted as ₹X,XX,XXX, submitted_by name, dept_name, created_at
+                       date.
+
+  3                    Status chain: a horizontal flow of 3 steps: Submitted → Admin
+                       Approved → Super Admin Approved. Each step is a circle with
+                       checkmark if done or number if pending. Color green if done, blue
+                       if current, gray if pending.
+
+  4                    Approve/Reject buttons: only show if the user role has the next
+                       required action. Admin sees buttons when status='submitted'. Super
+                       Admin sees buttons when status='admin_approved'. Reject always
+                       requires a reason — show an inline textarea that appears when
+                       Reject is clicked. Confirm reject only when reason is typed.
+  -------------------- ------------------------------------------------------------------
+
+PHASE 5 — New Pages (Steps 24–25)
+
+  ------------------ ------------------------------------------------------------------
+  STEP 24 · F6 Build 
+  WorkerPortalPage — 
+  mobile-first task  
+  management         
+
+  FILE               frontend/src/pages/WorkerPortalPage.jsx (new)
+
+  1                  Max width: max-w-md mx-auto (mobile-first layout). Import:
+                     fetchMyTasks, fetchTaskDetail, submitTaskUpdate from
+                     api/workerApi.js (create this file if not exists with these 3
+                     functions).
+
+  2                  Header bar: worker name from localStorage auth_user, current task
+                     count badge (from tasks length), notification bell navigating to
+                     /notifications.
+
+  3                  SurveyAutoTriggerBanner at top: fetch GET /surveys/user/my (via
+                     client.get), if pending surveys > 0 show the banner with
+                     onNavigate going to /survey/{surveys[0].id}.
+
+  4                  My Tasks section: tabs All / Pending / In Progress / Completed.
+                     Task cards: task_number, complaint title, infra type icon (use
+                     material symbols), address_text, priority badge (color coded),
+                     due_date, status. Click → show Task Detail inline (no route change
+                     — use useState for selected task).
+
+  5                  Task Detail: task description, complaint summary, small inline
+                     Mapbox map centered on complaint location (use VITE_MAPBOX_TOKEN),
+                     before photos grid (2 cols), after photos grid, progress notes as
+                     a timeline. Action buttons at bottom: 'Upload Before Photo', 'Log
+                     Progress', 'Upload After Photo + Complete' — each opens
+                     TaskUpdateModal. On submit: call submitTaskUpdate(task.id,
+                     formData). On success: refetch task detail.
+
+  6                  Completed tab: side-by-side before/after photo comparison (two
+                     columns of thumbnails).
+  ------------------ ------------------------------------------------------------------
+
+  --------------------- ------------------------------------------------------------------
+  STEP 25 · F7 Build    
+  InfraNodeDetailPage   
+
+  FILE                  frontend/src/pages/InfraNodeDetailPage.jsx (new)
+
+  1                     Route: /admin/infra-nodes/:nodeId. Import: fetchNodeHistory,
+                        fetchNodeRepeatIssues, fetchInfraNodeSummary,
+                        fetchInfraNodeAiSummary from adminApi.js. Import:
+                        MapboxInfraLayer, NodeHealthBar, CriticalAlertBadge from
+                        components.
+
+  2                     Header: node name (from history), infra type name, status badge,
+                        NodeHealthBar for health_score, jurisdiction_name. Back button
+                        navigating to /dashboard.
+
+  3                     Section 1 — Repeat Risk Banner: call fetchNodeRepeatIssues on
+                        mount. If is_within_warranty=true: prominent red banner showing
+                        '⚠️ Warranty Active — {liable_contractor.company_name} is liable
+                        for free repair. Repaired {gap_days} days ago
+                        ({warranty_years}-year warranty).'
+
+  4                     Section 2 — Complaint Timeline: call fetchNodeHistory. Vertical
+                        timeline list. Each item: complaint_number (monospace), title,
+                        status badge, priority badge, resolution date, assigned_contractor
+                        company_name and assigned_worker name.
+
+  5                     Section 3 — Active Workflow: if any workflow_instance in history
+                        has status='in_progress', show a step progress bar. Each step:
+                        name, department, color-coded status dot (completed=green,
+                        in_progress=yellow, pending=gray).
+
+  6                     Section 4 — AI Analysis: collapsed by default with 'Load AI
+                        Analysis' button. On click: call fetchInfraNodeAiSummary(nodeId).
+                        Show major_themes as chips, criticality_assessment text,
+                        recommended_action card, estimated_severity badge. Show spinner
+                        while loading.
+
+  7                     Section 5 — Map: small Mapbox map (h-64) centered on node location
+                        from history data. Show a single marker for the node. Show nearby
+                        nodes as small gray dots from fetchInfraNodeMap filtered by
+                        proximity if available.
+  --------------------- ------------------------------------------------------------------
+
+PHASE 6 — Citizen Page Enhancements (Step 26)
+
+  ----------------------- ------------------------------------------------------------------
+  STEP 26 · F2 Enhance    
+  ComplaintStatusPage +   
+  NotificationsPage       
+
+  FILE                    existing pages — enhance, do not rewrite from scratch
+
+  1                       ComplaintStatusPage.jsx — Add a 'View on Map' button below the
+                          Actions section. When clicked, show a small collapsible Mapbox map
+                          (max-h-64) centered on complaint.lat/complaint.lng with a single
+                          red pin. Import Map and Marker from react-map-gl. Hide if
+                          complaint has no lat/lng.
+
+  2                       ComplaintStatusPage.jsx — Add infra node card: if complaint has
+                          infra_node_id, fetch GET
+                          /admin/infra-nodes/{infra_node_id}/summary and show a card below
+                          the Description section: infra type icon, node status badge, open
+                          complaints count, jurisdiction name, and a 'View Infrastructure'
+                          link to /admin/infra-nodes/{infra_node_id}. Only show for
+                          official/admin/super_admin roles (check localStorage role).
+
+  3                       NotificationsPage.jsx — The 'Pending Surveys' section already
+                          pulls from /surveys/user/my. Improve it: add a count badge to the
+                          Surveys tab showing number of pending surveys. If the user has
+                          pending surveys, show a yellow banner at the top of the
+                          notifications list (outside the filter tabs) with the
+                          SurveyAutoTriggerBanner component. Pass count from
+                          surveyRes.data.filter(s => s.status === 'pending').length.
+  ----------------------- ------------------------------------------------------------------
+
+PHASE 7 — Dashboard Pages (Steps 27–29)
+
+These are the largest Codex tasks. Each should be a separate session.
+Provide Codex with the full component list (imported from steps 19-23)
+in context.
+
+  ----------------------- ------------------------------------------------------------------
+  STEP 27 · F3 Build      
+  OfficialDashboardPage — 
+  6 tabs                  
+
+  FILE                    frontend/src/pages/admin/OfficialDashboardPage.jsx
+
+  1                       Check if this file already exists. If yes, audit it against the
+                          spec below and patch gaps. If no, create fresh.
+
+  2                       Structure: sticky KPI bar at top (total, open, critical,
+                          needs_workflow, repeat counts from fetchAdminKPI(), refresh every
+                          60s). Below: 6-tab horizontal tab bar with tab content panel.
+
+  3                       Tab 1 MAP (default): full-height MapboxInfraLayer. Data:
+                          fetchInfraNodeMap(). Filter controls: infra type dropdown, status
+                          dropdown, repeat-risk checkbox. On node click: open a right-side
+                          slide-over drawer (fixed right-0 w-96 bg-white shadow-xl) showing
+                          InfraNodeCard + 'View Full Details' button navigating to
+                          /admin/infra-nodes/{id}.
+
+  4                       Tab 2 COMPLAINT QUEUE: paginated table from fetchComplaintQueue().
+                          Columns: number, title, infra type, jurisdiction, priority badge,
+                          status badge, repeat indicator (red ! if is_repeat_complaint), age
+                          in days, actions dropdown (View, Assign Workflow, Reroute). Filter
+                          bar above table: status select, priority select, infra type
+                          select, 'Needs Workflow' toggle. Each row: show LowConfidenceTag
+                          if mapping_confidence is null. Reroute button opens a modal with
+                          fetchDepartments() multi-select + reason textarea + submit calling
+                          rerouteComplaint.
+
+  5                       Tab 3 LOW CONFIDENCE: table from fetchLowConfidenceQueue(). Same
+                          columns. Each row: prominent 'Route Now' button opening a drawer
+                          with complaint description, AI suggested departments
+                          (agent_suggested_dept_ids), searchable department selector (from
+                          fetchDepartments()), reason textarea (required), Submit button
+                          calling rerouteComplaint(id, {new_dept_ids, reason}).
+
+  6                       Tab 4 TASKS: table from fetchAdminTaskList(). Columns: task
+                          number, title, assigned worker/contractor name, status, priority,
+                          due date, progress photos count, View action. Status filter tabs
+                          at top.
+
+  7                       Tab 5 CRITICAL ALERTS: grid of CriticalAlertBadge components from
+                          fetchCriticalAlerts(). Top summary line: '{n} nodes with warranty
+                          breach complaints'. Each card's onView navigates to
+                          /admin/infra-nodes/{node_id}.
+
+  8                       Tab 6 WORKFLOW RECOMMENDATIONS: fetch complaint queue with
+                          needs_workflow=true (needs_workflow param). For each complaint:
+                          show complaint card + WorkflowRecommendationPanel (from
+                          fetchWorkflowSuggestions(complaint.id)). onSelect calls
+                          approveWorkflow. onEditAndSelect opens an inline step editor
+                          (draggable list of steps using useState). On approve: call
+                          approveWorkflow. On edited approve: call saveWorkflowLearning then
+                          approveWorkflow.
+
+  9                       Floating CRMAgentChat button (bottom-right, already built). Just
+                          import and render.
+  ----------------------- ------------------------------------------------------------------
+
+  -------------------- ------------------------------------------------------------------
+  STEP 28 · F4 Build   
+  AdminDashboardPage — 
+  5 tabs               
+
+  FILE                 frontend/src/pages/admin/AdminDashboardPage.jsx
+
+  1                    Check if this file already exists. If yes, patch. If no, create
+                       fresh.
+
+  2                    Tab 1 OVERVIEW: 4-col KPI card grid (total_complaints, open,
+                       critical, resolved from fetchAdminKPI()). Department performance
+                       table (dept_breakdown from KPI). Worker leaderboard (from
+                       fetchAvailableWorkers() sorted by performance_score desc, show top
+                       5).
+
+  3                    Tab 2 MAP: MapboxInfraLayer scoped to admin's department. Show
+                       department name as a filter label. Same interaction as official
+                       map tab.
+
+  4                    Tab 3 TENDER APPROVALS: grid of TenderApprovalCard from
+                       fetchTenders({status: 'submitted'}) for admin role. onApprove
+                       calls approveTender. onReject calls rejectTender. After action,
+                       remove card from list and show a toast.
+
+  5                    Tab 4 STAFF: table of officials/workers/contractors from
+                       fetchStaffUsers(). Filter by role select. Columns: name, role
+                       badge, department, jurisdiction, active tasks count (from task
+                       data if available — show '—' if not), Firebase auth status dot
+                       (green if has auth_uid in the response, red if not). Edit button
+                       opens a drawer with update form using fetchJurisdictions() for
+                       jurisdiction select.
+
+  6                    Tab 5 CRITICAL ALERTS: same CriticalAlertBadge grid as official
+                       but dept-scoped.
+
+  7                    Floating CRMAgentChat button.
+  -------------------- ------------------------------------------------------------------
+
+  ------------------------- ------------------------------------------------------------------
+  STEP 29 · F5 Build        
+  SuperAdminDashboardPage — 
+  6 tabs                    
+
+  FILE                      frontend/src/pages/SuperAdminDashboardPage.jsx (new)
+
+  1                         Tab 1 CITY OVERVIEW: city-wide KPI cards. Department breakdown bar
+                            chart using recharts (BarChart, XAxis, YAxis, Bar —
+                            x-axis=dept_name, bars for complaints and tasks_done). Top infra
+                            types as a PieChart from recharts.
+
+  2                         Tab 2 MAP: city-wide MapboxInfraLayer. Department filter dropdown
+                            (all departments from fetchDepartments()). Pass filtered data to
+                            the map layer.
+
+  3                         Tab 3 TENDER FINAL APPROVALS: fetchTenders({status:
+                            'admin_approved'}). Only super_admin sees this. TenderApprovalCard
+                            grid. Approval updates status to super_admin_approved. Rejection
+                            requires reason.
+
+  4                         Tab 4 CRITICAL ALERTS: city-wide CriticalAlertBadge grid. Export
+                            button: on click, convert alerts array to CSV string and trigger a
+                            download via a blob URL. Fields: node_id, infra_type_name,
+                            jurisdiction_name, days_since_resolution, liable_contractor,
+                            new_complaint_number.
+
+  5                         Tab 5 STAFF MANAGEMENT: full city-wide staff list from
+                            fetchStaffUsers(). 'Add Staff' button opens a modal with create
+                            form: email, full_name, role select, department_id select (from
+                            fetchDepartments()), jurisdiction_id select (from
+                            fetchJurisdictions()), phone. Submit calls createStaffUser.
+                            Deactivate button in each row calls deactivateStaffUser.
+
+  6                         Tab 6 ANALYTICS: complaint resolution trend — LineChart (recharts)
+                            with last 12 months data (use KPI dept_breakdown or add a new API
+                            call if needed). SLA compliance BarChart. Survey rating trend
+                            LineChart if survey data is available from KPI.
+
+  7                         Floating CRMAgentChat button.
+  ------------------------- ------------------------------------------------------------------
+
+PHASE 8 — Routing & Guards (Steps 30–31)
+
+  ------------------------ ------------------------------------------------------------------
+  STEP 30 · F8 Enhance     
+  UserManagementPage with  
+  JurisdictionSelector +   
+  Firebase status          
+
+  FILE                     frontend/src/pages/admin/UserManagementPage.jsx
+
+  1                        Add a JurisdictionSelector: a standard <select> that fetches
+                           fetchJurisdictions() on mount. Store in state. Render as a
+                           searchable native select with an <input type='search'> above it
+                           that filters the options client-side using useState.
+
+  2                        In the create/edit form: when role is 'official' or 'admin', mark
+                           the jurisdiction_id field as required and show a red asterisk.
+                           When role is 'worker' or 'contractor', mark it optional.
+
+  3                        In the staff table, add a 'Firebase Auth' column: if
+                           has_firebase_auth (or auth_uid present in user object) is true,
+                           show a green dot with tooltip 'Active login'. If false, show a red
+                           dot with tooltip 'No login — run bootstrap script'.
+
+  4                        Show validation error message below jurisdiction field if role is
+                           official/admin and no jurisdiction is selected on form submit.
+  ------------------------ ------------------------------------------------------------------
+
+  ---------- ------------------------------------------------------------------
+  STEP 31 ·  
+  F9 Update  
+  App.jsx    
+  routes +   
+  SideNav    
+  worker     
+  route      
+
+  FILE       frontend/src/App.jsx + frontend/src/components/SideNav.jsx
+
+  1          In App.jsx, add these new routes: /admin/infra-nodes/:nodeId →
+             InfraNodeDetailPage (guard: official/admin/super_admin). /worker →
+             WorkerPortalPage (guard: worker/contractor). /super-admin →
+             SuperAdminDashboardPage (guard: super_admin). Import all three
+             pages at the top of App.jsx.
+
+  2          In RoleBasedDashboard(): worker/contractor should return
+             <WorkerPortalPage /> instead of <WorkerDashboardPage /> OR
+             redirect to /worker.
+
+  3          In SideNav.jsx: update WORKER_NAV to change the to field from
+             '/dashboard' to '/worker'. Add a new item: { to: '/worker', icon:
+             'assignment', label: 'My Tasks' }.
+
+  4          Update the ProtectedRoute redirect logic: citizens → /dashboard,
+             workers/contractors → /worker, officials → /dashboard, admins →
+             /dashboard, super_admin → /super-admin.
+  ---------- ------------------------------------------------------------------
+
+PHASE 9 — Hardening (Steps 32–34)
+
+  ---------- ------------------------------------------------------------------
+  STEP 32 ·  
+  H1         
+  Tailwind   
+  class      
+  cleanup    
+
+  FILE       frontend/ (run command)
+
+  1          Run: npx @tailwindcss/upgrade in the frontend directory.
+
+  2          Replace all flagged deprecated classes: flex-shrink-0 → shrink-0,
+             overflow-ellipsis → text-ellipsis.
+
+  3          Fix any arbitrary value warnings in the output.
+
+  4          Run the dev server and verify there are no Tailwind console
+             warnings.
+  ---------- ------------------------------------------------------------------
+
+  --------------- ------------------------------------------------------------------
+  STEP 33 · H2    
+  Add startup     
+  schema          
+  compatibility   
+  check           
+
+  FILE            backend/main.py
+
+  1               Add a @app.on_event('startup') async handler.
+
+  2               In the handler, get a DB session and run: SELECT 1 FROM complaints
+                  LIMIT 0; SELECT 1 FROM infra_nodes LIMIT 0; SELECT 1 FROM tasks
+                  LIMIT 0; SELECT 1 FROM workflow_instances LIMIT 0.
+
+  3               If any of these raise a ProgrammingError or OperationalError, log
+                  a CRITICAL error message with the exception and call sys.exit(1)
+                  to prevent a broken server from accepting requests.
+
+  4               If all pass, log INFO: 'Schema compatibility check passed'.
+  --------------- ------------------------------------------------------------------
+
+  ----------- ------------------------------------------------------------------
+  STEP 34 ·   
+  H3 Nightly  
+  embedding   
+  backfill    
+  script      
+
+  FILE        backend/scripts/backfill_embeddings.py (create new)
+
+  1           Load DATABASE_URL from .env using python-dotenv. Connect to DB.
+
+  2           Query: SELECT c.id, c.translated_description FROM complaints c
+              LEFT JOIN complaint_embeddings ce ON ce.complaint_id = c.id WHERE
+              ce.complaint_id IS NULL AND c.is_deleted = FALSE AND
+              c.translated_description IS NOT NULL LIMIT 100.
+
+  3           For each complaint: call the existing
+              create_complaint_embeddings() service (import from the appropriate
+              service module). INSERT into complaint_embeddings. Print progress.
+
+  4           At the end, print total processed. This script is designed to be
+              run via Cloud Scheduler or cron — no daemon loop needed.
+  ----------- ------------------------------------------------------------------
+
+SECTION 5 · QUICK REFERENCE
+
+API Endpoints — Complete Mapping
+
+  ------------------------------------ ---------- ------------------------------------
+  Endpoint                             Status     Frontend Consumer
+
+  GET /auth/me                         ✅         ProfilePage, TopBar, all route
+                                                  guards
+
+  POST /auth/login, /signup            ✅         LoginPage, SignupPage
+
+  GET /complaints                      ✅         MyComplaintsPage
+
+  POST /complaints/ingest              ✅         SubmitComplaintPage
+
+  GET /complaints/all                  ✅         PublicMapPage
+
+  GET /complaints/:id                  ✅         ComplaintStatusPage
+
+  GET /complaints/:id/history          ✅         ComplaintStatusPage
+
+  GET /surveys/:id                     ✅         SurveyPage
+
+  POST /surveys/:id/submit             ✅         SurveyPage
+
+  GET /surveys/user/my                 ✅         NotificationsPage, WorkerPortalPage
+
+  GET /admin/dashboard/kpi             ✅         All dashboards (KPI bar)
+
+  GET /admin/complaints/queue          🔴 Bug     OfficialDashboard Tab 2
+                                       (fixing    
+                                       step 1)    
+
+  GET /admin/complaints/low-confidence 🚫 Step 11 OfficialDashboard Tab 3
+
+  GET /admin/critical-alerts           🚫 Step 9  All dashboards Tab 5
+
+  GET /admin/tenders                   🚫 Step 10 Admin Tab 3, SuperAdmin Tab 3
+
+  POST /admin/tenders                  🚫 Step 10 OfficialDashboard (create tender)
+
+  POST /admin/tenders/:id/approve      🚫 Step 10 TenderApprovalCard
+
+  POST /admin/tenders/:id/reject       🚫 Step 10 TenderApprovalCard
+
+  GET /admin/jurisdictions             🚫 Step 12 UserMgmt, Staff form
+
+  GET /admin/infra-nodes (list)        🚫 Step 8  OfficialDashboard drawer
+
+  GET /admin/infra-nodes/:id/summary   ✅         InfraNodeDetailPage Section 4
+
+  GET                                  ✅         InfraNodeDetailPage (on demand)
+  /admin/infra-nodes/:id/ai-summary               
+
+  GET /infra/nodes (paginated)         🚫 Step 7  Infra router (admin use)
+
+  GET /infra/nodes/map (GeoJSON)       🚫 Step 7  MapboxInfraLayer (all dashboards)
+
+  GET /infra/nodes/:id/history         🚫 Step 7  InfraNodeDetailPage
+
+  GET /infra/nodes/:id/repeat-issues   🚫 Step 7  InfraNodeDetailPage
+
+  POST                                 🚫 Step 14 OfficialDashboard Tab 6
+  /admin/workflows/:id/save-learning              
+
+  GET /worker/tasks                    ✅         WorkerPortalPage
+
+  POST /worker/tasks/:id/update        ✅         TaskUpdateModal
+
+  GET /pubsub/complaint-received       🚫 Step 6  GCP Pub/Sub push (no frontend)
+  ------------------------------------ ---------- ------------------------------------
+
+File Creation Summary — What Codex Creates vs Edits
+
+  --------------------------------------------------------- ---------------- --------------------
+  File                                                      Action           Step
+
+  backend/routes/pubsub_router.py                           CREATE           Step 6
+
+  backend/routes/infra_router.py                            CREATE           Step 7
+
+  backend/Dockerfile                                        CREATE           Step 3
+
+  backend/.dockerignore                                     CREATE           Step 3
+
+  backend/scripts/bootstrap_firebase_staff.py               CREATE           Step 17
+
+  backend/scripts/backfill_embeddings.py                    CREATE           Step 34
+
+  backend/routes/admin_router.py                            EDIT (x8)        Steps 1,8–14,16
+
+  backend/main.py                                           EDIT (x2)        Steps 2, 33
+
+  backend/config.py                                         EDIT             Step 5
+
+  backend/services/notification_service.py                  EDIT             Step 4
+
+  backend/routes/worker_router.py                           EDIT             Step 15
+
+  frontend/src/api/adminApi.js                              EDIT             Step 18
+
+  frontend/src/App.jsx                                      EDIT             Step 31
+
+  frontend/src/components/SideNav.jsx                       EDIT             Step 31
+
+  frontend/src/pages/ComplaintStatusPage.jsx                EDIT             Step 26
+
+  frontend/src/pages/NotificationsPage.jsx                  EDIT             Step 26
+
+  frontend/src/pages/admin/UserManagementPage.jsx           EDIT             Step 30
+
+  frontend/src/components/InfraNodeCard.jsx                 CREATE           Step 19
+
+  frontend/src/components/NodeHealthBar.jsx                 CREATE           Step 19
+
+  frontend/src/components/LowConfidenceTag.jsx              CREATE           Step 19
+
+  frontend/src/components/CriticalAlertBadge.jsx            CREATE           Step 20
+
+  frontend/src/components/SurveyAutoTriggerBanner.jsx       CREATE           Step 20
+
+  frontend/src/components/MapboxInfraLayer.jsx              CREATE           Step 21
+
+  frontend/src/components/WorkflowRecommendationPanel.jsx   CREATE           Step 22
+
+  frontend/src/components/TaskUpdateModal.jsx               CREATE           Step 22
+
+  frontend/src/components/TenderApprovalCard.jsx            CREATE           Step 23
+
+  frontend/src/pages/WorkerPortalPage.jsx                   CREATE           Step 24
+
+  frontend/src/pages/InfraNodeDetailPage.jsx                CREATE           Step 25
+
+  frontend/src/pages/SuperAdminDashboardPage.jsx            CREATE           Step 29
+
+  frontend/src/pages/admin/OfficialDashboardPage.jsx        CREATE/REWRITE   Step 27
+
+  frontend/src/pages/admin/AdminDashboardPage.jsx           CREATE/REWRITE   Step 28
+  --------------------------------------------------------- ---------------- --------------------
+
+Dependency Graph — What Blocks What
+
+-   Steps 1–6 (Phase 0) block ALL admin testing. Do these first.
+
+-   Step 7 (infra_router) must be done before Steps 21
+    (MapboxInfraLayer) and 25 (InfraNodeDetailPage).
+
+-   Step 18 (adminApi.js) must be done before Steps 19–31 (all frontend
+    work).
+
+-   Steps 19–23 (components) must be done before Steps 24, 25, 27, 28,
+    29.
+
+-   Step 27 (OfficialDashboard) is the most complex — build after all
+    components and APIs are ready.
+
+-   Step 31 (routing) should be done LAST in the frontend phase — after
+    all pages exist.
+
+PS-CRM Build Document · 34 Atomic Steps · Generated for Codex

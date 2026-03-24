@@ -100,6 +100,7 @@ export default function ComplaintStatusPage() {
 
   const activeStep = getStepIndex(complaint.status);
   const isResolved = ["resolved", "closed"].includes(complaint.status);
+  const hasMapPoint = complaint.lat != null && complaint.lng != null;
 
   // Build a timestamp map from history: { new_status -> created_at }
   const timestampByStatus = {};
@@ -216,6 +217,20 @@ export default function ComplaintStatusPage() {
             )}
           </div>
 
+          {/* Infra node linkage */}
+          {complaint.infra_node_id && (
+            <div className="bg-surface-container-low border border-outline-variant rounded-2xl p-5">
+              <h2 className="font-headline font-semibold text-on-surface mb-2 flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px] text-primary">lan</span>
+                Linked Infrastructure Node
+              </h2>
+              <p className="text-sm text-on-surface">Node ID: {complaint.infra_node_id}</p>
+              <p className="text-xs text-on-surface-variant mt-1">
+                Workflow: {complaint.workflow_instance_id || "Not started"}
+              </p>
+            </div>
+          )}
+
           {/* AI Summary */}
           {complaint.agent_summary && (
             <div className="bg-primary/5 border border-primary/20 rounded-2xl p-5">
@@ -229,6 +244,16 @@ export default function ComplaintStatusPage() {
 
           {/* Actions */}
           <div className="flex gap-3 flex-wrap">
+            {hasMapPoint && (
+              <a
+                href={`https://www.google.com/maps?q=${complaint.lat},${complaint.lng}`}
+                target="_blank"
+                rel="noreferrer"
+                className="border border-outline-variant text-on-surface px-5 py-2.5 rounded-full text-sm font-semibold hover:bg-surface-container transition"
+              >
+                View on Map
+              </a>
+            )}
             <Link
               to="/submit"
               className="bg-primary text-on-primary px-5 py-2.5 rounded-full text-sm font-semibold hover:bg-primary/90 transition"
@@ -254,7 +279,7 @@ export default function ComplaintStatusPage() {
             </h2>
             <div className="flex items-center gap-5">
               <div className="relative w-16 h-16">
-                <svg className="rotate-[-90deg]" width="64" height="64" viewBox="0 0 64 64">
+                <svg className="-rotate-90" width="64" height="64" viewBox="0 0 64 64">
                   <circle cx="32" cy="32" r="24" fill="none" stroke="#e8def8" strokeWidth="6" />
                   <circle
                     cx="32" cy="32" r="24" fill="none"
@@ -291,7 +316,7 @@ export default function ComplaintStatusPage() {
                   <div key={step.key} className="flex items-start gap-3">
                     <div className="flex flex-col items-center">
                       <div
-                        className={`w-7 h-7 rounded-full flex items-center justify-center text-[14px] flex-shrink-0 ${
+                        className={`w-7 h-7 shrink-0 rounded-full flex items-center justify-center text-[14px] ${
                           done
                             ? current
                               ? "bg-primary text-on-primary"

@@ -112,6 +112,7 @@ export default function NotificationsPage() {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("All");
+  const [pendingSurveyCount, setPendingSurveyCount] = useState(0);
 
   useEffect(() => {
     async function load() {
@@ -121,7 +122,9 @@ export default function NotificationsPage() {
           fetchMyComplaints({ limit: 50 }),
           client.get("/surveys/user/my").catch(() => ({ data: [] }))
         ]);
-        setNotifications(buildNotifications(compRes.items || [], surveyRes.data || []));
+        const surveys = surveyRes.data || [];
+        setPendingSurveyCount(surveys.filter((s) => s.status === "pending").length);
+        setNotifications(buildNotifications(compRes.items || [], surveys));
       } catch (e) {
         toast.error("Failed to load notifications.");
       } finally {
@@ -164,6 +167,11 @@ export default function NotificationsPage() {
             {unreadCount > 0 && (
               <p className="text-sm text-on-surface-variant mt-0.5">
                 {unreadCount} unread
+              </p>
+            )}
+            {pendingSurveyCount > 0 && (
+              <p className="text-xs text-on-surface-variant mt-0.5">
+                {pendingSurveyCount} pending survey{pendingSurveyCount > 1 ? "s" : ""}
               </p>
             )}
           </div>
@@ -234,7 +242,7 @@ export default function NotificationsPage() {
                   <span className="absolute top-4 right-4 w-2 h-2 rounded-full bg-primary" />
                 )}
                 <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${
+                  className={`w-10 h-10 shrink-0 rounded-full flex items-center justify-center ${
                     n.type === "survey"
                       ? "bg-orange-100 text-orange-600"
                       : "bg-primary/10 text-primary"

@@ -143,7 +143,7 @@ export default function InfraNodeDetailPage() {
           <button type="button"
             onClick={() => { const next = !aiOpen; setAiOpen(next); if (next) loadAi(); }}
             className="px-3 py-1.5 rounded-xl text-xs font-medium text-white transition-colors"
-            style={{ background: aiOpen ? "rgba(139,92,246,0.2)" : "rgba(255,255,255,0.08)", border: "1px solid rgba(139,92,246,0.3)" }}>
+            style={{ background: aiOpen ? "rgba(139,92,246,0.15)" : "rgba(0,0,0,0.05)", border: "1px solid rgba(139,92,246,0.25)" }}>
             {aiOpen ? "Hide" : "Load AI Analysis"}
           </button>
         </div>
@@ -155,7 +155,7 @@ export default function InfraNodeDetailPage() {
             </div>
           ) : (
             <pre className="overflow-x-auto rounded-xl p-3 text-xs text-slate-300"
-              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+              style={{ background: "rgba(248,250,252,0.8)", border: "1px solid rgba(0,0,0,0.06)" }}>
               {JSON.stringify(aiData || {}, null, 2)}
             </pre>
           )
@@ -168,7 +168,7 @@ export default function InfraNodeDetailPage() {
           <span className="material-symbols-outlined text-[16px] text-sky-400">map</span>
           Location
         </h2>
-        <div className="rounded-xl overflow-hidden" style={{ height: 260, border: "1px solid rgba(255,255,255,0.08)" }}>
+        <div className="rounded-xl overflow-hidden" style={{ height: 260, border: "1px solid rgba(0,0,0,0.08)" }}>
           <Map
             initialViewState={{
               longitude: nodeLocation?.lng || 77.209,

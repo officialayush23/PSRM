@@ -39,7 +39,7 @@ const ROLE_STYLE = {
 };
 
 function RoleBadge({ role }) {
-  const s = ROLE_STYLE[role] || { bg: "rgba(255,255,255,0.08)", color: "#94a3b8" };
+  const s = ROLE_STYLE[role] || { bg: "rgba(0,0,0,0.06)", color: "#64748b" };
   return (
     <span className="rounded-full px-2 py-0.5 text-[11px] font-medium"
       style={{ background: s.bg, color: s.color }}>
@@ -205,9 +205,9 @@ export default function AdminDashboardPage() {
               onClick={() => setActiveTab(tab.key)}
               className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all"
               style={{
-                background: activeTab === tab.key ? "rgba(56,189,248,0.15)" : "rgba(255,255,255,0.04)",
+                background: activeTab === tab.key ? "rgba(56,189,248,0.15)" : "rgba(0,0,0,0.04)",
                 color: activeTab === tab.key ? "#38bdf8" : "#64748b",
-                border: `1px solid ${activeTab === tab.key ? "rgba(56,189,248,0.3)" : "rgba(255,255,255,0.06)"}`,
+                border: `1px solid ${activeTab === tab.key ? "rgba(56,189,248,0.3)" : "rgba(0,0,0,0.06)"}`,
               }}>
               <span className="material-symbols-outlined text-[14px]">{tab.icon}</span>
               {tab.label}
@@ -236,10 +236,10 @@ export default function AdminDashboardPage() {
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               {/* Dept performance */}
               <div className="gcard p-4">
-                <h2 className="text-sm font-semibold text-white mb-3">Department Performance</h2>
+                <h2 className="text-sm font-semibold text-slate-800 mb-3">Department Performance</h2>
                 <div className="overflow-x-auto">
                   <table className="w-full text-xs">
-                    <thead style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                    <thead style={{ borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
                       <tr>
                         <th className={tableHead}>Department</th>
                         <th className={tableHead}>Complaints</th>
@@ -250,10 +250,10 @@ export default function AdminDashboardPage() {
                     <tbody>
                       {deptBreakdown.map((d, idx) => (
                         <tr key={d.department_id || d.dept_id || idx} className={tableRow}
-                          style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
-                          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.03)"}
+                          style={{ borderBottom: "1px solid rgba(0,0,0,0.05)" }}
+                          onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"}
                           onMouseLeave={e => e.currentTarget.style.background = ""}>
-                          <td className="px-4 py-2.5 text-white">{d.dept_name || d.department_name || d.name || "-"}</td>
+                          <td className="px-4 py-2.5 text-slate-800">{d.dept_name || d.department_name || d.name || "-"}</td>
                           <td className="px-4 py-2.5 text-slate-400">{d.complaints ?? d.total_complaints ?? 0}</td>
                           <td className="px-4 py-2.5 text-emerald-400">{d.resolved ?? d.resolved_count ?? 0}</td>
                           <td className="px-4 py-2.5 text-sky-400">{d.tasks_done ?? d.task_done ?? 0}</td>
@@ -267,15 +267,15 @@ export default function AdminDashboardPage() {
 
               {/* Worker leaderboard */}
               <div className="gcard p-4">
-                <h2 className="text-sm font-semibold text-white mb-3">Worker Leaderboard</h2>
+                <h2 className="text-sm font-semibold text-slate-800 mb-3">Worker Leaderboard</h2>
                 <div className="flex flex-col gap-2">
                   {leaderboard.map((w, i) => (
                     <div key={w.id} className="flex items-center justify-between rounded-xl px-3 py-2.5"
-                      style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.05)" }}>
+                      style={{ background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.06)" }}>
                       <div className="flex items-center gap-3">
                         <span className="text-xs font-bold text-slate-600">#{i + 1}</span>
                         <div>
-                          <p className="text-sm font-semibold text-white">{w.full_name || w.name || "Unnamed"}</p>
+                          <p className="text-sm font-semibold text-slate-800">{w.full_name || w.name || "Unnamed"}</p>
                           <p className="text-xs text-slate-500">{w.department_name || adminDeptName}</p>
                         </div>
                       </div>
@@ -295,9 +295,9 @@ export default function AdminDashboardPage() {
         {/* ── Map ── */}
         {activeTab === "map" && (
           <div className="flex flex-col gap-3">
-            <div className="rounded-xl px-4 py-2.5 text-xs text-slate-400"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
-              Department scope: <span className="font-semibold text-white">{adminDeptName}</span>
+            <div className="rounded-xl px-4 py-2.5 text-xs text-slate-500"
+              style={{ background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.06)" }}>
+              Department scope: <span className="font-semibold text-slate-800">{adminDeptName}</span>
             </div>
             <div style={{ height: 520 }}>
               <MapboxInfraLayer
@@ -311,7 +311,7 @@ export default function AdminDashboardPage() {
         {/* ── Tenders ── */}
         {activeTab === "tenders" && (
           <div className="flex flex-col gap-4">
-            <h2 className="text-sm font-semibold text-white">Tender Approvals</h2>
+            <h2 className="text-sm font-semibold text-slate-800">Tender Approvals</h2>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {tenders.map(t => (
                 <TenderApprovalCard key={t.id} tender={t} userRole="admin"
@@ -327,8 +327,8 @@ export default function AdminDashboardPage() {
         {/* ── Staff ── */}
         {activeTab === "staff" && (
           <div className="gcard overflow-hidden">
-            <div className="flex items-center justify-between gap-2 p-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-              <h2 className="text-sm font-semibold text-white">Staff</h2>
+            <div className="flex items-center justify-between gap-2 p-4" style={{ borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
+              <h2 className="text-sm font-semibold text-slate-800">Staff</h2>
               <select
                 value={staffRoleFilter}
                 onChange={(e) => setStaffRoleFilter(e.target.value)}
@@ -340,7 +340,7 @@ export default function AdminDashboardPage() {
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
-                <thead style={{ background: "rgba(255,255,255,0.02)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                <thead style={{ background: "rgba(0,0,0,0.03)", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
                   <tr>
                     <th className={tableHead}>Name</th>
                     <th className={tableHead}>Role</th>
@@ -354,10 +354,10 @@ export default function AdminDashboardPage() {
                 <tbody>
                   {staffRows.map(s => (
                     <tr key={s.id} className={tableRow}
-                      style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
-                      onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.02)"}
+                      style={{ borderBottom: "1px solid rgba(0,0,0,0.05)" }}
+                      onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.02)"}
                       onMouseLeave={e => e.currentTarget.style.background = ""}>
-                      <td className="px-4 py-3 text-white font-medium">{s.full_name || "-"}</td>
+                      <td className="px-4 py-3 text-slate-800 font-medium">{s.full_name || "-"}</td>
                       <td className="px-4 py-3"><RoleBadge role={s.role} /></td>
                       <td className="px-4 py-3 text-slate-400">{s.department_name || s.dept_name || "-"}</td>
                       <td className="px-4 py-3 text-slate-400">{s.jurisdiction_name || "-"}</td>
@@ -384,7 +384,7 @@ export default function AdminDashboardPage() {
         {/* ── Alerts ── */}
         {activeTab === "alerts" && (
           <div className="flex flex-col gap-4">
-            <h2 className="text-sm font-semibold text-white">Critical Alerts</h2>
+            <h2 className="text-sm font-semibold text-slate-800">Critical Alerts</h2>
             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               {criticalAlerts.map((a, idx) => (
                 <CriticalAlertBadge key={a.new_complaint_id || a.node_id || idx} alert={a}
@@ -404,12 +404,12 @@ export default function AdminDashboardPage() {
           onClick={() => setEditingUser(null)}>
           <aside
             className="absolute right-0 top-0 h-full w-full max-w-md p-6 overflow-y-auto"
-            style={{ background: "rgba(10,16,35,0.97)", backdropFilter: "blur(24px)", borderLeft: "1px solid rgba(255,255,255,0.1)" }}
+            style={{ background: "rgba(255,255,255,0.97)", backdropFilter: "blur(24px)", borderLeft: "1px solid rgba(0,0,0,0.08)", boxShadow: "-20px 0 60px rgba(0,0,0,0.1)" }}
             onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
-              <h3 className="text-sm font-semibold text-white">Edit Staff User</h3>
+              <h3 className="text-sm font-semibold text-slate-800">Edit Staff User</h3>
               <button onClick={() => setEditingUser(null)}
-                className="w-8 h-8 rounded-full hover:bg-white/8 flex items-center justify-center">
+                className="w-8 h-8 rounded-full hover:bg-black/5 flex items-center justify-center">
                 <span className="material-symbols-outlined text-slate-400 text-[18px]">close</span>
               </button>
             </div>
@@ -439,7 +439,7 @@ export default function AdminDashboardPage() {
               <input value={editingUser.phone || ""}
                 onChange={(e) => setEditingUser(prev => ({ ...prev, phone: e.target.value }))}
                 className="w-full px-3 py-2 rounded-xl text-sm ginput" placeholder="Phone" />
-              <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
+              <label className="flex items-center gap-2 text-sm text-slate-600 cursor-pointer">
                 <input type="checkbox"
                   checked={editingUser.is_active !== false}
                   onChange={(e) => setEditingUser(prev => ({ ...prev, is_active: e.target.checked }))}

@@ -20,17 +20,17 @@ export default function CriticalAlertBadge({ alert, onView }) {
         )}
       </div>
 
-      <p className="text-sm font-semibold text-white">{alert.infra_type_name || "Infrastructure Node"}</p>
-      <p className="text-xs text-slate-400 mt-0.5">Complaint: {alert.complaint_number || "-"}</p>
+      <p className="text-sm font-semibold text-slate-800">{alert.infra_type_name || "Infrastructure Node"}</p>
+      <p className="text-xs text-slate-500 mt-0.5">Complaint: {alert.complaint_number || "-"}</p>
 
       <div className="mt-2 flex flex-wrap gap-2 text-xs">
         <span className="flex items-center gap-1 px-2 py-1 rounded-lg"
-          style={{ background: "rgba(255,255,255,0.06)", color: "#94a3b8" }}>
+          style={{ background: "rgba(0,0,0,0.05)", color: "#64748b" }}>
           <span className="material-symbols-outlined text-[12px]">schedule</span>
           {alert.days_since_resolution ?? "-"} days since last resolution
         </span>
         <span className="flex items-center gap-1 px-2 py-1 rounded-lg"
-          style={{ background: "rgba(255,255,255,0.06)", color: "#94a3b8" }}>
+          style={{ background: "rgba(0,0,0,0.05)", color: "#64748b" }}>
           <span className="material-symbols-outlined text-[12px]">construction</span>
           {alert.liable_contractor || "No contractor mapped"}
         </span>

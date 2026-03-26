@@ -301,7 +301,7 @@ export default function ComplaintStatusPage() {
                 const done    = idx <= activeStep;
                 const current = idx === activeStep;
                 const ts      = timestampByStatus[step.key];
-                const dotColor = done ? (current ? "#38bdf8" : "#34d399") : "rgba(255,255,255,0.1)";
+                const dotColor = done ? (current ? "#38bdf8" : "#34d399") : "rgba(0,0,0,0.1)";
                 return (
                   <div key={step.key} className="flex items-start gap-3">
                     <div className="flex flex-col items-center">
@@ -313,11 +313,11 @@ export default function ComplaintStatusPage() {
                       </div>
                       {idx < STATUS_STEPS.length - 1 && (
                         <div className="w-0.5 h-8 mt-1"
-                          style={{ background: done ? "rgba(56,189,248,0.3)" : "rgba(255,255,255,0.06)" }} />
+                          style={{ background: done ? "rgba(56,189,248,0.3)" : "rgba(0,0,0,0.08)" }} />
                       )}
                     </div>
                     <div className="pb-4">
-                      <p className={`text-sm font-medium ${done ? "text-white" : "text-slate-600"}`}>
+                      <p className={`text-sm font-medium ${done ? "text-slate-800" : "text-slate-400"}`}>
                         {step.label}
                       </p>
                       {done && ts ? (

@@ -28,7 +28,7 @@ function StarRating({ value, onChange }) {
           onMouseLeave={() => setHovered(0)}
           className="text-4xl transition-all"
           style={{ transform: star <= active ? "scale(1.15)" : "scale(1)" }}>
-          <span style={{ color: star <= active ? "#fbbf24" : "rgba(255,255,255,0.1)", filter: star <= active ? "drop-shadow(0 0 6px rgba(251,191,36,0.6))" : "none" }}>
+          <span style={{ color: star <= active ? "#fbbf24" : "rgba(0,0,0,0.12)", filter: star <= active ? "drop-shadow(0 0 6px rgba(251,191,36,0.6))" : "none" }}>
             ★
           </span>
         </button>
@@ -40,7 +40,7 @@ function StarRating({ value, onChange }) {
 function GCard({ children, className = "", style = {} }) {
   return (
     <div className={`rounded-2xl p-5 ${className}`}
-      style={{ background: "rgba(255,255,255,0.04)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.08)", ...style }}>
+      style={{ background: "rgba(255,255,255,0.7)", backdropFilter: "blur(20px)", border: "1px solid rgba(0,0,0,0.08)", ...style }}>
       {children}
     </div>
   );
@@ -97,7 +97,7 @@ export default function SurveyPage() {
     }
   };
 
-  const glassPage = { minHeight: "100vh", background: "linear-gradient(135deg,#060d1f,#0a1628,#070e1c)", backgroundAttachment: "fixed" };
+  const glassPage = { minHeight: "100vh", background: "linear-gradient(135deg,#eef2ff,#f8faff,#f0f4ff)", backgroundAttachment: "fixed" };
 
   // ── Loading ───────────────────────────────────────────────────
   if (loading) {
@@ -117,7 +117,7 @@ export default function SurveyPage() {
       <div style={glassPage} className="flex items-center justify-center p-4">
         <GCard className="max-w-sm w-full text-center">
           <span className="material-symbols-outlined text-5xl text-slate-600 block mb-3">sentiment_dissatisfied</span>
-          <p className="font-semibold text-white mb-2">Survey Unavailable</p>
+          <p className="font-semibold text-slate-800 mb-2">Survey Unavailable</p>
           <p className="text-sm text-slate-400 mb-6">{error}</p>
           <button onClick={() => navigate("/")}
             className="w-full py-3 rounded-xl text-sm font-bold text-white gbtn-sky">
@@ -137,7 +137,7 @@ export default function SurveyPage() {
             style={{ background: "rgba(52,211,153,0.15)", boxShadow: "0 0 32px rgba(52,211,153,0.2)" }}>
             <span className="material-symbols-outlined text-emerald-400 text-4xl">check_circle</span>
           </div>
-          <h2 className="text-xl font-bold text-white mb-2">
+          <h2 className="text-xl font-bold text-slate-800 mb-2">
             {rating >= 4 ? "Thank you! 🙏" : "Feedback Received"}
           </h2>
           <p className="text-sm text-slate-400 mb-2">
@@ -175,7 +175,7 @@ export default function SurveyPage() {
       <div className="px-5 py-6" style={{ background: "rgba(56,189,248,0.08)", borderBottom: "1px solid rgba(56,189,248,0.15)" }}>
         <div className="max-w-lg mx-auto">
           <p className="text-xs font-semibold text-sky-400/70 uppercase tracking-wider mb-1">PS-CRM · Citizen Survey</p>
-          <h1 className="text-xl font-bold text-white">{survey.survey_title}</h1>
+          <h1 className="text-xl font-bold text-slate-800">{survey.survey_title}</h1>
           <p className="text-sm text-slate-400 mt-1">{survey.survey_description}</p>
         </div>
       </div>
@@ -190,7 +190,7 @@ export default function SurveyPage() {
               <p className="text-xs font-mono text-sky-400">#{survey.complaint_number}</p>
             </div>
           </div>
-          <p className="font-semibold text-white text-sm mb-1">{survey.complaint_title}</p>
+          <p className="font-semibold text-slate-800 text-sm mb-1">{survey.complaint_title}</p>
           {survey.address_text && (
             <p className="text-xs text-slate-500 flex items-center gap-1">
               <span className="material-symbols-outlined text-[12px]">location_on</span>
@@ -210,7 +210,7 @@ export default function SurveyPage() {
 
         {/* Star rating */}
         <GCard className="text-center">
-          <p className="text-sm font-semibold text-white mb-4">How would you rate the work done?</p>
+          <p className="text-sm font-semibold text-slate-800 mb-4">How would you rate the work done?</p>
           <StarRating value={rating} onChange={setRating} />
           {rating > 0 && (
             <p className="mt-3 text-sm font-bold" style={{ color: RATING_COLORS[rating] }}>
@@ -222,7 +222,7 @@ export default function SurveyPage() {
         {/* Is resolved? */}
         {isClosing && (
           <GCard>
-            <p className="text-sm font-semibold text-white mb-3">Was the issue actually fixed?</p>
+            <p className="text-sm font-semibold text-slate-800 mb-3">Was the issue actually fixed?</p>
             <div className="grid grid-cols-2 gap-3">
               {[
                 { val: true,  label: "Yes, it's fixed",  color: "#34d399", bg: "rgba(52,211,153,0.15)" },
@@ -231,8 +231,8 @@ export default function SurveyPage() {
                 <button key={String(opt.val)} type="button" onClick={() => setIsResolved(opt.val)}
                   className="py-5 rounded-xl text-sm font-semibold transition-all"
                   style={{
-                    background: isResolved === opt.val ? opt.bg : "rgba(255,255,255,0.04)",
-                    border: `1px solid ${isResolved === opt.val ? `${opt.color}40` : "rgba(255,255,255,0.08)"}`,
+                    background: isResolved === opt.val ? opt.bg : "rgba(0,0,0,0.04)",
+                    border: `1px solid ${isResolved === opt.val ? `${opt.color}40` : "rgba(0,0,0,0.08)"}`,
                     color: isResolved === opt.val ? opt.color : "#64748b",
                   }}>
                   {opt.label}
@@ -254,8 +254,8 @@ export default function SurveyPage() {
                 <button key={String(opt.val)} type="button" onClick={() => setWantsFollowup(opt.val)}
                   className="py-4 rounded-xl text-sm font-semibold transition-all"
                   style={{
-                    background: wantsFollowup === opt.val ? "rgba(251,146,60,0.2)" : "rgba(255,255,255,0.04)",
-                    border: `1px solid ${wantsFollowup === opt.val ? "rgba(251,146,60,0.4)" : "rgba(255,255,255,0.08)"}`,
+                    background: wantsFollowup === opt.val ? "rgba(251,146,60,0.2)" : "rgba(0,0,0,0.04)",
+                    border: `1px solid ${wantsFollowup === opt.val ? "rgba(251,146,60,0.4)" : "rgba(0,0,0,0.08)"}`,
                     color: wantsFollowup === opt.val ? "#fb923c" : "#64748b",
                   }}>
                   {opt.label}
@@ -267,7 +267,7 @@ export default function SurveyPage() {
 
         {/* Feedback text */}
         <GCard>
-          <p className="text-sm font-semibold text-white mb-2">Any additional comments? (optional)</p>
+          <p className="text-sm font-semibold text-slate-800 mb-2">Any additional comments? (optional)</p>
           <textarea
             value={feedback}
             onChange={e => setFeedback(e.target.value)}

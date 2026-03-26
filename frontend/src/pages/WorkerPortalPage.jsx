@@ -54,13 +54,13 @@ export default function WorkerPortalPage() {
 
   return (
     <div className="mx-auto max-w-md p-3 pb-20"
-      style={{ minHeight: "100vh", background: "linear-gradient(135deg,#060d1f,#0a1628,#070e1c)" }}>
+      style={{ minHeight: "100vh", background: "linear-gradient(135deg,#eef2ff,#f8faff,#f0f4ff)" }}>
 
       {/* Header */}
       <header className="mb-3 rounded-2xl p-4"
-        style={{ background: "rgba(255,255,255,0.04)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.08)" }}>
+        style={{ background: "rgba(255,255,255,0.7)", backdropFilter: "blur(20px)", border: "1px solid rgba(0,0,0,0.08)" }}>
         <p className="text-xs uppercase tracking-wide text-slate-500 font-semibold">Worker Portal</p>
-        <h1 className="text-lg font-bold text-white mt-0.5">{user?.full_name || "Worker"}</h1>
+        <h1 className="text-lg font-bold text-slate-800 mt-0.5">{user?.full_name || "Worker"}</h1>
         <p className="mt-1 text-xs text-slate-500">{tasks.length} task(s) in current filter</p>
       </header>
 
@@ -71,7 +71,7 @@ export default function WorkerPortalPage() {
 
       {/* Tab bar */}
       <div className="mb-3 rounded-xl p-1"
-        style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
+        style={{ background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.06)" }}>
         <div className="grid grid-cols-4 gap-1">
           {TABS.map(t => (
             <button key={t.key} type="button" onClick={() => setTab(t.key)}
@@ -91,26 +91,26 @@ export default function WorkerPortalPage() {
         {loading ? (
           Array(3).fill(0).map((_,i) => (
             <div key={i} className="rounded-2xl p-4 animate-pulse"
-              style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.06)" }}>
-              <div className="h-3 w-32 rounded mb-2" style={{ background: "rgba(255,255,255,0.06)" }} />
-              <div className="h-4 w-48 rounded" style={{ background: "rgba(255,255,255,0.04)" }} />
+              style={{ background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.06)" }}>
+              <div className="h-3 w-32 rounded mb-2" style={{ background: "rgba(0,0,0,0.06)" }} />
+              <div className="h-4 w-48 rounded" style={{ background: "rgba(0,0,0,0.06)" }} />
             </div>
           ))
         ) : tasks.length === 0 ? (
           <div className="rounded-2xl p-6 text-center"
-            style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+            style={{ background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.06)" }}>
             <span className="material-symbols-outlined text-4xl text-slate-600 block mb-2">task_alt</span>
             <p className="text-sm text-slate-500">No tasks in this status.</p>
           </div>
         ) : tasks.map(task => {
-          const st = STATUS_STYLE[task.status] || { bg: "rgba(255,255,255,0.08)", color: "#94a3b8" };
+          const st = STATUS_STYLE[task.status] || { bg: "rgba(0,0,0,0.06)", color: "#64748b" };
           return (
             <article key={task.id} className="rounded-2xl p-4"
-              style={{ background: "rgba(255,255,255,0.04)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.08)" }}>
+              style={{ background: "rgba(255,255,255,0.7)", backdropFilter: "blur(20px)", border: "1px solid rgba(0,0,0,0.08)" }}>
               <div className="mb-2 flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-xs font-mono text-slate-500">{task.task_number || task.id}</p>
-                  <h3 className="text-sm font-semibold text-white mt-0.5">{task.title}</h3>
+                  <h3 className="text-sm font-semibold text-slate-800 mt-0.5">{task.title}</h3>
                 </div>
                 <span className="rounded-full px-2 py-1 text-xs font-bold capitalize whitespace-nowrap shrink-0"
                   style={{ background: st.bg, color: st.color }}>
@@ -144,14 +144,14 @@ export default function WorkerPortalPage() {
                       <p className="mb-1 text-[11px] font-semibold capitalize"
                         style={{ color: label === "before" ? "#94a3b8" : "#34d399" }}>{label}</p>
                       <div className="rounded-xl overflow-hidden"
-                        style={{ border: "1px solid rgba(255,255,255,0.08)" }}>
+                        style={{ border: "1px solid rgba(0,0,0,0.08)" }}>
                         {(photos || []).slice(0,1).map((p, idx) => (
                           <img key={idx} src={p.url || p} alt={label}
                             className="h-20 w-full object-cover" />
                         ))}
                         {!(photos || []).length && (
                           <div className="h-20 flex items-center justify-center"
-                            style={{ background: "rgba(255,255,255,0.02)" }}>
+                            style={{ background: "rgba(0,0,0,0.04)" }}>
                             <span className="text-xs text-slate-600">No photo</span>
                           </div>
                         )}

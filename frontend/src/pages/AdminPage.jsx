@@ -27,7 +27,7 @@ export default function AdminPage() {
             <span className="material-symbols-outlined text-sky-400 text-3xl">admin_panel_settings</span>
           </div>
           <div className="text-center">
-            <h2 className="font-black text-xl text-white mb-1">Official Command Center</h2>
+            <h2 className="font-black text-xl text-slate-800 mb-1">Official Command Center</h2>
             <p className="text-sm text-slate-500 mb-6 max-w-sm">
               Your full dashboard is at the main Dashboard page with all tabs —
               complaints, workflow, tasks, surveys, infra nodes and tenders.

@@ -20,7 +20,7 @@ export default function NodeHealthBar({ score = null }) {
         <span style={{ color, fontWeight: 700 }}>{label}</span>
       </div>
       <div className="h-2 w-full overflow-hidden rounded-full"
-        style={{ background: "rgba(255,255,255,0.08)" }}>
+        style={{ background: "rgba(0,0,0,0.08)" }}>
         <div className="h-full rounded-full transition-all"
           style={{ width: widthPct, background: color, boxShadow: `0 0 6px ${color}60` }} />
       </div>

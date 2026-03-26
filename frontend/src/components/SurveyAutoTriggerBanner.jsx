@@ -10,7 +10,7 @@ export default function SurveyAutoTriggerBanner({ surveyCount = 0, onNavigate })
         <div className="flex items-center gap-2">
           <span className="material-symbols-outlined text-sky-400 text-[20px]">rate_review</span>
           <div>
-            <p className="text-sm font-semibold text-sky-300">Citizen Feedback Pending</p>
+            <p className="text-sm font-semibold text-sky-600">Citizen Feedback Pending</p>
             <p className="text-xs text-sky-400/70">
               {surveyCount} survey{surveyCount > 1 ? "s" : ""} waiting for response.
             </p>

@@ -45,10 +45,10 @@ function Avatar({ name, color }) {
 
 function SkeletonRow() {
   return (
-    <tr style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+    <tr style={{ borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
       {[1,2,3,4,5].map(i => (
         <td key={i} className="px-4 py-3">
-          <div className="h-4 rounded animate-pulse" style={{ background: "rgba(255,255,255,0.06)" }} />
+          <div className="h-4 rounded animate-pulse" style={{ background: "rgba(0,0,0,0.06)" }} />
         </td>
       ))}
     </tr>
@@ -150,11 +150,11 @@ function UserDrawer({ open, onClose, editUser, departments, onSuccess }) {
       style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
       onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="w-full max-w-lg flex flex-col overflow-y-auto"
-        style={{ background: "rgba(8,15,32,0.98)", backdropFilter: "blur(24px)", borderLeft: "1px solid rgba(255,255,255,0.1)" }}>
+        style={{ background: "rgba(255,255,255,0.97)", backdropFilter: "blur(24px)", borderLeft: "1px solid rgba(0,0,0,0.08)", boxShadow: "-20px 0 60px rgba(0,0,0,0.1)" }}>
 
         {/* Header */}
         <div className="flex items-center gap-3 px-6 py-5"
-          style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+          style={{ borderBottom: "1px solid rgba(0,0,0,0.08)" }}>
           <div className="w-10 h-10 rounded-xl flex items-center justify-center"
             style={{ background: (roleMeta?.color || "#6366f1") + "22" }}>
             <span className="material-symbols-outlined text-[20px]"
@@ -163,14 +163,14 @@ function UserDrawer({ open, onClose, editUser, departments, onSuccess }) {
             </span>
           </div>
           <div className="flex-1">
-            <h2 className="font-black text-white text-lg">{isEdit ? "Edit User" : "Create New User"}</h2>
+            <h2 className="font-black text-slate-800 text-lg">{isEdit ? "Edit User" : "Create New User"}</h2>
             <p className="text-xs text-slate-500">{isEdit ? `Editing ${editUser?.full_name}` : "Creates Firebase account + DB record"}</p>
           </div>
           <button onClick={onClose}
             className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
-            style={{ background: "rgba(255,255,255,0.06)" }}
-            onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
-            onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}>
+            style={{ background: "rgba(0,0,0,0.05)" }}
+            onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.1)"}
+            onMouseLeave={e => e.currentTarget.style.background = "rgba(0,0,0,0.05)"}>
             <span className="material-symbols-outlined text-slate-400 text-[18px]">close</span>
           </button>
         </div>
@@ -186,11 +186,11 @@ function UserDrawer({ open, onClose, editUser, departments, onSuccess }) {
                 <button key={k} type="button" onClick={() => set("role", k)}
                   className="p-3 rounded-xl text-left transition-all"
                   style={{
-                    background:  form.role === k ? m.color + "15" : "rgba(255,255,255,0.04)",
-                    border:      `1px solid ${form.role === k ? m.color + "50" : "rgba(255,255,255,0.08)"}`,
+                    background:  form.role === k ? m.color + "15" : "rgba(0,0,0,0.04)",
+                    border:      `1px solid ${form.role === k ? m.color + "50" : "rgba(0,0,0,0.08)"}`,
                   }}>
                   <span className="material-symbols-outlined text-[18px] block mb-1" style={{ color: m.color }}>{m.icon}</span>
-                  <p className="font-bold text-sm" style={{ color: form.role === k ? "#f1f5f9" : "#94a3b8" }}>{m.label}</p>
+                  <p className="font-bold text-sm" style={{ color: form.role === k ? "#1e293b" : "#64748b" }}>{m.label}</p>
                   <p className="text-[10px] mt-0.5 leading-tight text-slate-600">{m.desc}</p>
                 </button>
               ))}
@@ -234,8 +234,8 @@ function UserDrawer({ open, onClose, editUser, departments, onSuccess }) {
                 <button key={v} type="button" onClick={() => set("preferred_language", v)}
                   className="flex-1 py-2 rounded-xl text-sm font-bold transition-all"
                   style={{
-                    background: form.preferred_language === v ? "rgba(56,189,248,0.2)" : "rgba(255,255,255,0.04)",
-                    border:     `1px solid ${form.preferred_language === v ? "rgba(56,189,248,0.4)" : "rgba(255,255,255,0.08)"}`,
+                    background: form.preferred_language === v ? "rgba(56,189,248,0.15)" : "rgba(0,0,0,0.04)",
+                    border:     `1px solid ${form.preferred_language === v ? "rgba(56,189,248,0.4)" : "rgba(0,0,0,0.08)"}`,
                     color:      form.preferred_language === v ? "#38bdf8" : "#64748b",
                   }}>{l}</button>
               ))}
@@ -258,7 +258,7 @@ function UserDrawer({ open, onClose, editUser, departments, onSuccess }) {
         </div>
 
         {/* Footer */}
-        <div className="px-6 pb-6 pt-3" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+        <div className="px-6 pb-6 pt-3" style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}>
           <button onClick={handleSubmit} disabled={saving}
             className="w-full py-3.5 rounded-xl font-black text-sm text-white disabled:opacity-40 transition-all"
             style={{ background: roleMeta?.color || "#6366f1" }}>
@@ -279,20 +279,20 @@ function ConfirmModal({ open, onClose, onConfirm, name, loading }) {
       style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}
       onClick={e => e.target === e.currentTarget && onClose()}>
       <div className="w-full max-w-sm rounded-2xl p-6"
-        style={{ background: "rgba(8,15,32,0.98)", border: "1px solid rgba(255,255,255,0.1)" }}>
+        style={{ background: "rgba(255,255,255,0.97)", border: "1px solid rgba(0,0,0,0.08)", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
         <div className="w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4"
           style={{ background: "rgba(239,68,68,0.15)" }}>
           <span className="material-symbols-outlined text-red-400 text-[24px]">person_off</span>
         </div>
-        <h3 className="font-black text-white text-center text-lg mb-1">Deactivate User?</h3>
-        <p className="text-sm text-slate-400 text-center mb-5">
-          This will prevent <strong className="text-slate-200">{name}</strong> from logging in and disable their Firebase account.
+        <h3 className="font-black text-slate-800 text-center text-lg mb-1">Deactivate User?</h3>
+        <p className="text-sm text-slate-600 text-center mb-5">
+          This will prevent <strong className="text-slate-800">{name}</strong> from logging in and disable their Firebase account.
         </p>
         <div className="flex gap-3">
           <button onClick={onClose}
-            className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-400 transition-colors"
-            style={{ border: "1px solid rgba(255,255,255,0.1)" }}
-            onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
+            className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-600 transition-colors"
+            style={{ border: "1px solid rgba(0,0,0,0.1)" }}
+            onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.04)"}
             onMouseLeave={e => e.currentTarget.style.background = ""}>
             Cancel
           </button>
@@ -388,7 +388,7 @@ export default function UserManagementPage() {
         {/* Header */}
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-black text-white">User Management</h1>
+            <h1 className="text-2xl font-black text-slate-800">User Management</h1>
             <p className="text-sm text-slate-500 mt-0.5">
               {isSuperAdmin ? "Create and manage all staff accounts" : "View staff in your department"}
             </p>
@@ -407,15 +407,15 @@ export default function UserManagementPage() {
             <button key={s.v} onClick={() => setRoleFilter(s.v === roleFilter ? "" : s.v)}
               className="rounded-2xl p-4 text-left transition-all"
               style={{
-                background:  roleFilter === s.v ? s.color + "18" : "rgba(255,255,255,0.04)",
-                border:      `1px solid ${roleFilter === s.v ? s.color + "40" : "rgba(255,255,255,0.08)"}`,
+                background:  roleFilter === s.v ? s.color + "18" : "rgba(255,255,255,0.7)",
+                border:      `1px solid ${roleFilter === s.v ? s.color + "40" : "rgba(0,0,0,0.08)"}`,
                 backdropFilter: "blur(20px)",
               }}>
               <div className="flex items-center justify-between mb-2">
                 <span className="material-symbols-outlined text-[20px]" style={{ color: s.color }}>{s.icon}</span>
                 <span className="text-2xl font-black" style={{ color: s.color }}>{s.count}</span>
               </div>
-              <p className="text-xs font-bold text-slate-400">{s.l}</p>
+              <p className="text-xs font-bold text-slate-600">{s.l}</p>
             </button>
           ))}
         </div>
@@ -433,8 +433,8 @@ export default function UserManagementPage() {
               <button key={o.v} onClick={() => setRoleFilter(o.v)}
                 className="px-3 py-2 rounded-xl text-xs font-bold transition-all"
                 style={{
-                  background: roleFilter === o.v ? "rgba(56,189,248,0.2)" : "rgba(255,255,255,0.04)",
-                  border:     `1px solid ${roleFilter === o.v ? "rgba(56,189,248,0.4)" : "rgba(255,255,255,0.08)"}`,
+                  background: roleFilter === o.v ? "rgba(56,189,248,0.15)" : "rgba(0,0,0,0.04)",
+                  border:     `1px solid ${roleFilter === o.v ? "rgba(56,189,248,0.4)" : "rgba(0,0,0,0.08)"}`,
                   color:      roleFilter === o.v ? "#38bdf8" : "#64748b",
                 }}>{o.l}</button>
             ))}
@@ -443,18 +443,18 @@ export default function UserManagementPage() {
 
         {/* User table */}
         <div className="rounded-2xl overflow-hidden"
-          style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+          style={{ background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.08)" }}>
 
           {/* Mobile: card list */}
           <div className="block md:hidden">
             {loading ? (
               Array(4).fill(0).map((_,i) => (
-                <div key={i} className="p-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+                <div key={i} className="p-4" style={{ borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full animate-pulse" style={{ background: "rgba(255,255,255,0.06)" }} />
+                    <div className="w-10 h-10 rounded-full animate-pulse" style={{ background: "rgba(0,0,0,0.06)" }} />
                     <div className="flex-1 flex flex-col gap-1.5">
-                      <div className="h-3 rounded animate-pulse w-32" style={{ background: "rgba(255,255,255,0.06)" }} />
-                      <div className="h-3 rounded animate-pulse w-48" style={{ background: "rgba(255,255,255,0.04)" }} />
+                      <div className="h-3 rounded animate-pulse w-32" style={{ background: "rgba(0,0,0,0.06)" }} />
+                      <div className="h-3 rounded animate-pulse w-48" style={{ background: "rgba(0,0,0,0.04)" }} />
                     </div>
                   </div>
                 </div>
@@ -475,7 +475,7 @@ export default function UserManagementPage() {
           <div className="hidden md:block overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr style={{ background: "rgba(255,255,255,0.04)", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
+                <tr style={{ background: "rgba(0,0,0,0.04)", borderBottom: "1px solid rgba(0,0,0,0.06)" }}>
                   {["User","Role","Department","Contact","Status","Actions"].map(h => (
                     <th key={h} className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wider"
                       style={{ color: "#475569" }}>{h}</th>
@@ -534,15 +534,15 @@ function UserRow({ user, isSuperAdmin, onEdit, onDeactivate }) {
   const m = ROLE_META[user.role];
   return (
     <tr className="group transition-colors"
-      style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}
-      onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.03)"}
+      style={{ borderBottom: "1px solid rgba(0,0,0,0.05)" }}
+      onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.03)"}
       onMouseLeave={e => e.currentTarget.style.background = ""}>
       <td className="px-4 py-3">
         <div className="flex items-center gap-3">
           <Avatar name={user.full_name} color={m?.color} />
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <p className="font-bold text-white text-sm">{user.full_name}</p>
+              <p className="font-bold text-slate-800 text-sm">{user.full_name}</p>
               {!user.has_firebase_auth && (
                 <span className="text-[10px] font-bold px-1.5 py-0.5 rounded"
                   style={{ background: "rgba(251,191,36,0.15)", color: "#fbbf24" }}>No Firebase</span>
@@ -556,11 +556,11 @@ function UserRow({ user, isSuperAdmin, onEdit, onDeactivate }) {
         <RoleBadge role={user.role} size="xs" />
       </td>
       <td className="px-4 py-3">
-        <p className="text-sm text-slate-300">{user.dept_name || "—"}</p>
+        <p className="text-sm text-slate-600">{user.dept_name || "—"}</p>
         <p className="text-[10px] text-slate-500">{user.jurisdiction_name || ""}</p>
       </td>
       <td className="px-4 py-3">
-        <p className="text-sm text-slate-400">{user.phone || "—"}</p>
+        <p className="text-sm text-slate-500">{user.phone || "—"}</p>
         {user.worker_score && (
           <div className="flex items-center gap-1 mt-0.5">
             <span className="text-amber-400 text-[11px]">★</span>
@@ -610,12 +610,12 @@ function UserRow({ user, isSuperAdmin, onEdit, onDeactivate }) {
 function MobileUserCard({ user, isSuperAdmin, onEdit, onDeactivate }) {
   const m = ROLE_META[user.role];
   return (
-    <div className="p-4" style={{ borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
+    <div className="p-4" style={{ borderBottom: "1px solid rgba(0,0,0,0.05)" }}>
       <div className="flex items-start gap-3">
         <Avatar name={user.full_name} color={m?.color} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap mb-1">
-            <p className="font-bold text-white text-sm">{user.full_name}</p>
+            <p className="font-bold text-slate-800 text-sm">{user.full_name}</p>
             <RoleBadge role={user.role} size="xs" />
             <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
               style={user.is_active

@@ -108,7 +108,7 @@ export default function ProfilePage() {
     ? form.full_name.split(" ").map((w) => w[0]).slice(0, 2).join("").toUpperCase()
     : "?";
 
-  const roleStyle = ROLE_COLOR[form.role] || { bg: "rgba(255,255,255,0.08)", color: "#94a3b8" };
+  const roleStyle = ROLE_COLOR[form.role] || { bg: "rgba(0,0,0,0.06)", color: "#64748b" };
 
   return (
     <AppLayout>
@@ -121,7 +121,7 @@ export default function ProfilePage() {
             {loading ? "…" : initials}
           </div>
           <div>
-            <h1 className="text-xl font-bold text-white">{loading ? "Loading…" : form.full_name || "—"}</h1>
+            <h1 className="text-xl font-bold text-slate-800">{loading ? "Loading…" : form.full_name || "—"}</h1>
             <p className="text-sm text-slate-400">{form.email}</p>
             <span className="mt-2 inline-block text-xs font-semibold px-2.5 py-0.5 rounded-full capitalize"
               style={{ background: roleStyle.bg, color: roleStyle.color }}>
@@ -140,7 +140,7 @@ export default function ProfilePage() {
             <div key={s.label} className="gcard p-4 flex items-center gap-3">
               <span className="material-symbols-outlined text-[22px]" style={{ color: s.color }}>{s.icon}</span>
               <div>
-                <p className="text-xl font-bold text-white">{loading ? "…" : (s.value ?? "—")}</p>
+                <p className="text-xl font-bold text-slate-800">{loading ? "…" : (s.value ?? "—")}</p>
                 <p className="text-xs text-slate-500">{s.label}</p>
               </div>
             </div>
@@ -149,7 +149,7 @@ export default function ProfilePage() {
 
         {/* Edit Form */}
         <form onSubmit={handleSave} className="gcard p-6 flex flex-col gap-5">
-          <h2 className="font-semibold text-white flex items-center gap-2">
+          <h2 className="font-semibold text-slate-800 flex items-center gap-2">
             <span className="material-symbols-outlined text-[20px] text-sky-400">edit</span>
             Personal Information
           </h2>
@@ -187,8 +187,8 @@ export default function ProfilePage() {
           </div>
 
           {/* Notification prefs */}
-          <div className="pt-4" style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
-            <h3 className="font-semibold text-sm text-white mb-4">Notification Preferences</h3>
+          <div className="pt-4" style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}>
+            <h3 className="font-semibold text-sm text-slate-800 mb-4">Notification Preferences</h3>
             <div className="flex flex-col gap-4">
               {[
                 { key: "email_opt_in",   label: "Email Notifications",            icon: "email" },
@@ -197,13 +197,13 @@ export default function ProfilePage() {
                 <div key={pref.key} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <span className="material-symbols-outlined text-[18px] text-slate-500">{pref.icon}</span>
-                    <span className="text-sm text-slate-300">{pref.label}</span>
+                    <span className="text-sm text-slate-600">{pref.label}</span>
                   </div>
                   <button
                     type="button"
                     onClick={() => setForm(f => ({ ...f, [pref.key]: !f[pref.key] }))}
                     className="w-11 h-6 rounded-full relative transition-colors"
-                    style={{ background: form[pref.key] ? "rgba(56,189,248,0.5)" : "rgba(255,255,255,0.1)" }}>
+                    style={{ background: form[pref.key] ? "#38bdf8" : "rgba(0,0,0,0.12)" }}>
                     <span
                       className="block w-4 h-4 rounded-full bg-white absolute top-1 transition-all"
                       style={{ left: form[pref.key] ? 24 : 4 }} />

@@ -16,7 +16,7 @@ const MAPBOX_TOKEN = import.meta.env.VITE_MAPBOX_TOKEN;
 
 // ── Step indicator ────────────────────────────────────────────────
 function StepDot({ n, active, done }) {
-  const bg    = done ? "#34d399" : active ? "#38bdf8" : "rgba(255,255,255,0.08)";
+  const bg    = done ? "#34d399" : active ? "#38bdf8" : "rgba(0,0,0,0.1)";
   const color = done || active ? "#fff" : "#475569";
   return (
     <div className="flex flex-col items-center gap-1">
@@ -204,7 +204,7 @@ export default function SubmitComplaintPage() {
                   {label}
                 </span>
               </button>
-              {i < 3 && <div className="flex-1 h-px mx-1 mb-4" style={{ background: "rgba(255,255,255,0.06)" }} />}
+              {i < 3 && <div className="flex-1 h-px mx-1 mb-4" style={{ background: "rgba(0,0,0,0.1)" }} />}
             </React.Fragment>
           ))}
         </div>
@@ -213,12 +213,12 @@ export default function SubmitComplaintPage() {
         {step === 1 && (
           <div className="gcard p-6 flex flex-col gap-5">
             <div>
-              <h4 className="text-sm font-semibold text-white">Take or upload a photo</h4>
+              <h4 className="text-sm font-semibold text-slate-800">Take or upload a photo</h4>
               <p className="text-xs text-slate-500 mt-0.5">Photo helps officials assess severity faster</p>
             </div>
 
             <div className="relative h-72 rounded-2xl overflow-hidden flex items-center justify-center"
-              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+              style={{ background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.06)" }}>
               {isCameraActive ? (
                 <>
                   <video ref={videoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
@@ -266,7 +266,7 @@ export default function SubmitComplaintPage() {
           <div className="gcard p-6 flex flex-col gap-4">
             <div className="flex items-start justify-between">
               <div>
-                <h4 className="text-sm font-semibold text-white">Where is the issue?</h4>
+                <h4 className="text-sm font-semibold text-slate-800">Where is the issue?</h4>
                 <p className="text-xs text-slate-500 mt-0.5">Allow GPS, tap on map, or search by address</p>
               </div>
               <button type="button" onClick={requestCurrentLocation}
@@ -292,7 +292,7 @@ export default function SubmitComplaintPage() {
             </div>
 
             {/* Map */}
-            <div className="rounded-xl overflow-hidden" style={{ height: 280, border: "1px solid rgba(255,255,255,0.08)" }}>
+            <div className="rounded-xl overflow-hidden" style={{ height: 280, border: "1px solid rgba(0,0,0,0.08)" }}>
               <Map
                 key={`${lat ?? 28.6139}-${lng ?? 77.209}`}
                 initialViewState={{ longitude: lng ?? 77.209, latitude: lat ?? 28.6139, zoom: 14, pitch: 45 }}
@@ -358,7 +358,7 @@ export default function SubmitComplaintPage() {
         {step === 3 && (
           <div className="gcard p-6 flex flex-col gap-4">
             <div>
-              <h4 className="text-sm font-semibold text-white">What type of issue is it?</h4>
+              <h4 className="text-sm font-semibold text-slate-800">What type of issue is it?</h4>
               <p className="text-xs text-slate-500 mt-0.5">Helps route to the right department. Skip if unsure — AI will classify it.</p>
             </div>
 
@@ -366,7 +366,7 @@ export default function SubmitComplaintPage() {
               <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                 {Array(8).fill(0).map((_, i) => (
                   <div key={i} className="h-20 rounded-xl animate-pulse"
-                    style={{ background: "rgba(255,255,255,0.04)" }} />
+                    style={{ background: "rgba(0,0,0,0.06)" }} />
                 ))}
               </div>
             ) : (
@@ -379,8 +379,8 @@ export default function SubmitComplaintPage() {
                       onClick={() => { setSelectedInfraId(selected ? "" : it.id); setCustomInfraName(""); }}
                       className="flex flex-col items-center gap-1.5 p-3 rounded-xl text-xs font-medium transition-all"
                       style={{
-                        background: selected ? "rgba(56,189,248,0.12)" : "rgba(255,255,255,0.03)",
-                        border: `1px solid ${selected ? "rgba(56,189,248,0.35)" : "rgba(255,255,255,0.06)"}`,
+                        background: selected ? "rgba(56,189,248,0.12)" : "rgba(255,255,255,0.7)",
+                        border: `1px solid ${selected ? "rgba(56,189,248,0.35)" : "rgba(0,0,0,0.07)"}`,
                         color: selected ? "#38bdf8" : "#64748b",
                       }}>
                       <span className="text-2xl">{meta.icon || "📍"}</span>
@@ -392,8 +392,8 @@ export default function SubmitComplaintPage() {
                 <button type="button" onClick={() => setSelectedInfraId("other")}
                   className="flex flex-col items-center gap-1.5 p-3 rounded-xl text-xs font-medium transition-all"
                   style={{
-                    background: isOtherType ? "rgba(251,146,60,0.12)" : "rgba(255,255,255,0.03)",
-                    border: `1px solid ${isOtherType ? "rgba(251,146,60,0.35)" : "rgba(255,255,255,0.06)"}`,
+                    background: isOtherType ? "rgba(251,146,60,0.12)" : "rgba(255,255,255,0.7)",
+                    border: `1px solid ${isOtherType ? "rgba(251,146,60,0.35)" : "rgba(0,0,0,0.07)"}`,
                     color: isOtherType ? "#fb923c" : "#64748b",
                   }}>
                   <span className="text-2xl">🔧</span>
@@ -403,8 +403,8 @@ export default function SubmitComplaintPage() {
                 <button type="button" onClick={() => { setSelectedInfraId("ai"); setCustomInfraName(""); }}
                   className="flex flex-col items-center gap-1.5 p-3 rounded-xl text-xs font-medium transition-all"
                   style={{
-                    background: isAiInfer ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.03)",
-                    border: `1px solid ${isAiInfer ? "rgba(139,92,246,0.35)" : "rgba(255,255,255,0.06)"}`,
+                    background: isAiInfer ? "rgba(139,92,246,0.12)" : "rgba(255,255,255,0.7)",
+                    border: `1px solid ${isAiInfer ? "rgba(139,92,246,0.35)" : "rgba(0,0,0,0.07)"}`,
                     color: isAiInfer ? "#a78bfa" : "#64748b",
                   }}>
                   <span className="text-2xl">🤖</span>

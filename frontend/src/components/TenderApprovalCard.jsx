@@ -28,21 +28,21 @@ export default function TenderApprovalCard({ tender, userRole, onApprove, onReje
 
   return (
     <article className="rounded-2xl p-4"
-      style={{ background: "rgba(255,255,255,0.04)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.08)" }}>
+      style={{ background: "rgba(255,255,255,0.7)", backdropFilter: "blur(20px)", border: "1px solid rgba(0,0,0,0.08)" }}>
 
       <div className="mb-3 flex items-start justify-between gap-3">
         <div>
           <p className="font-mono text-xs text-slate-500">{tender.tender_number || "-"}</p>
-          <h3 className="text-sm font-semibold text-white mt-0.5">{tender.title || "Tender"}</h3>
+          <h3 className="text-sm font-semibold text-slate-800 mt-0.5">{tender.title || "Tender"}</h3>
           <p className="mt-1 text-xs text-sky-400 font-semibold">₹ {amount.toLocaleString("en-IN")}</p>
         </div>
         <span className="rounded-full px-2 py-1 text-xs font-bold capitalize whitespace-nowrap"
-          style={{ background: "rgba(255,255,255,0.08)", color: "#94a3b8" }}>{status}</span>
+          style={{ background: "rgba(0,0,0,0.06)", color: "#64748b" }}>{status}</span>
       </div>
 
       {/* Approval flow */}
       <div className="mb-3 rounded-xl p-3"
-        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+        style={{ background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.06)" }}>
         <p className="mb-2 text-xs font-semibold text-slate-500">Approval Flow</p>
         <div className="grid grid-cols-3 gap-2">
           {flow.map((item, idx) => (
@@ -50,7 +50,7 @@ export default function TenderApprovalCard({ tender, userRole, onApprove, onReje
               className="rounded-lg px-2 py-2 text-center text-[10px] font-bold"
               style={idx <= activeIndex
                 ? { background: "rgba(52,211,153,0.15)", color: "#34d399" }
-                : { background: "rgba(255,255,255,0.04)", color: "#475569" }}>
+                : { background: "rgba(0,0,0,0.05)", color: "#475569" }}>
               {item.label}
             </div>
           ))}

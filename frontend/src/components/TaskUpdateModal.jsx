@@ -37,20 +37,20 @@ export default function TaskUpdateModal({ task, isOpen, onClose, onSubmit }) {
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={{ background: "rgba(0,0,0,0.6)", backdropFilter: "blur(4px)" }}>
       <div className="w-full max-w-lg rounded-2xl"
-        style={{ background: "rgba(8,15,32,0.98)", backdropFilter: "blur(24px)", border: "1px solid rgba(255,255,255,0.1)" }}>
+        style={{ background: "rgba(255,255,255,0.97)", backdropFilter: "blur(24px)", border: "1px solid rgba(0,0,0,0.08)", boxShadow: "0 20px 60px rgba(0,0,0,0.15)" }}>
 
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4"
-          style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+          style={{ borderBottom: "1px solid rgba(0,0,0,0.08)" }}>
           <div>
-            <h3 className="text-base font-bold text-white">Update Task</h3>
+            <h3 className="text-base font-bold text-slate-800">Update Task</h3>
             <p className="text-xs text-slate-500 mt-0.5">{task?.task_number || task?.id}</p>
           </div>
           <button type="button" onClick={onClose}
             className="w-8 h-8 rounded-full flex items-center justify-center transition-colors"
-            style={{ background: "rgba(255,255,255,0.06)" }}
-            onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
-            onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.06)"}>
+            style={{ background: "rgba(0,0,0,0.05)" }}
+            onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.1)"}
+            onMouseLeave={e => e.currentTarget.style.background = "rgba(0,0,0,0.05)"}>
             <span className="material-symbols-outlined text-slate-400 text-[18px]">close</span>
           </button>
         </div>
@@ -93,11 +93,11 @@ export default function TaskUpdateModal({ task, isOpen, onClose, onSubmit }) {
           </div>
 
           <div className="flex justify-end gap-2 pt-2"
-            style={{ borderTop: "1px solid rgba(255,255,255,0.06)" }}>
+            style={{ borderTop: "1px solid rgba(0,0,0,0.06)" }}>
             <button type="button" onClick={onClose}
-              className="px-4 py-2 rounded-xl text-sm font-bold text-slate-400 transition-colors"
-              style={{ border: "1px solid rgba(255,255,255,0.1)" }}
-              onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
+              className="px-4 py-2 rounded-xl text-sm font-bold text-slate-600 transition-colors"
+              style={{ border: "1px solid rgba(0,0,0,0.1)" }}
+              onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.04)"}
               onMouseLeave={e => e.currentTarget.style.background = ""}>
               Cancel
             </button>

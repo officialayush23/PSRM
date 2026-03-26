@@ -4,7 +4,7 @@ export default function WorkflowRecommendationPanel({ suggestions = [], onApprov
   if (!Array.isArray(suggestions) || suggestions.length === 0) {
     return (
       <section className="rounded-2xl p-4 text-sm text-slate-500"
-        style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+        style={{ background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.07)" }}>
         No recommendations available yet.
       </section>
     );
@@ -19,11 +19,11 @@ export default function WorkflowRecommendationPanel({ suggestions = [], onApprov
         return (
           <article key={item.version_id || item.template_id || idx}
             className="rounded-2xl p-4"
-            style={{ background: "rgba(255,255,255,0.04)", backdropFilter: "blur(20px)", border: "1px solid rgba(255,255,255,0.08)" }}>
+            style={{ background: "rgba(255,255,255,0.7)", backdropFilter: "blur(20px)", border: "1px solid rgba(0,0,0,0.08)" }}>
 
             <div className="mb-2 flex items-start justify-between gap-3">
               <div>
-                <h3 className="text-sm font-semibold text-white">{item.template_name || "Workflow Template"}</h3>
+                <h3 className="text-sm font-semibold text-slate-800">{item.template_name || "Workflow Template"}</h3>
                 <p className="text-xs text-slate-500 mt-0.5">Version: {item.version || item.version_number || "-"}</p>
               </div>
               <span className="rounded-full px-2 py-1 text-xs font-bold whitespace-nowrap"
@@ -34,12 +34,12 @@ export default function WorkflowRecommendationPanel({ suggestions = [], onApprov
 
             <div className="mb-3 grid grid-cols-2 gap-2 text-xs">
               <div className="rounded-xl p-2"
-                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                style={{ background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.06)" }}>
                 <p className="text-slate-500 mb-1">Estimated Duration</p>
-                <p className="font-semibold text-slate-300">{item.estimated_duration_days ?? item.estimated_days ?? "-"} days</p>
+                <p className="font-semibold text-slate-700">{item.estimated_duration_days ?? item.estimated_days ?? "-"} days</p>
               </div>
               <div className="rounded-xl p-2"
-                style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+                style={{ background: "rgba(0,0,0,0.04)", border: "1px solid rgba(0,0,0,0.06)" }}>
                 <p className="text-slate-500 mb-1">Steps</p>
                 <p className="font-semibold text-slate-300 flex items-center gap-1">
                   <span className="material-symbols-outlined text-[12px] text-slate-400">layers</span>
@@ -69,9 +69,9 @@ export default function WorkflowRecommendationPanel({ suggestions = [], onApprov
                 Approve
               </button>
               <button type="button" onClick={() => onCompare?.(item)}
-                className="px-3 py-2 rounded-xl text-xs font-bold text-slate-400 transition-colors"
-                style={{ border: "1px solid rgba(255,255,255,0.1)" }}
-                onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+                className="px-3 py-2 rounded-xl text-xs font-bold text-slate-600 transition-colors"
+                style={{ border: "1px solid rgba(0,0,0,0.1)" }}
+                onMouseEnter={e => e.currentTarget.style.background = "rgba(0,0,0,0.04)"}
                 onMouseLeave={e => e.currentTarget.style.background = ""}>
                 Compare
               </button>

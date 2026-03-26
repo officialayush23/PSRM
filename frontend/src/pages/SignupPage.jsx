@@ -55,13 +55,13 @@ export default function SignupPage() {
             style={{ background: "linear-gradient(135deg,rgba(56,189,248,0.2),rgba(129,140,248,0.15))", border: "1px solid rgba(56,189,248,0.25)" }}>
             <span className="material-symbols-outlined text-[28px] text-sky-400">location_city</span>
           </div>
-          <h1 className="text-2xl font-bold text-white">PS-CRM Delhi</h1>
+          <h1 className="text-2xl font-bold text-slate-800">PS-CRM Delhi</h1>
           <p className="text-slate-400 text-sm mt-1">Public Service Command Center</p>
         </div>
 
         {/* Card */}
         <div className="gcard p-8">
-          <h2 className="text-xl font-bold text-white mb-1">Create account</h2>
+          <h2 className="text-xl font-bold text-slate-800 mb-1">Create account</h2>
           <p className="text-slate-400 text-sm mb-6">Join Delhi's civic grievance network</p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
@@ -119,7 +119,7 @@ export default function SignupPage() {
                 <button
                   type="button"
                   onClick={() => setShowPass(v => !v)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 transition-colors"
                 >
                   <span className="material-symbols-outlined text-[18px]">
                     {showPass ? "visibility_off" : "visibility"}
@@ -157,10 +157,10 @@ export default function SignupPage() {
             { icon: "speed",        label: "Avg SLA",         value: "41 Days" },
           ].map(s => (
             <div key={s.label} className="rounded-2xl p-4 flex items-center gap-3"
-              style={{ background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.06)" }}>
+              style={{ background: "rgba(255,255,255,0.7)", border: "1px solid rgba(0,0,0,0.08)" }}>
               <span className="material-symbols-outlined text-sky-400 text-[20px]">{s.icon}</span>
               <div>
-                <p className="text-sm font-bold text-white">{s.value}</p>
+                <p className="text-sm font-bold text-slate-800">{s.value}</p>
                 <p className="text-[11px] text-slate-500">{s.label}</p>
               </div>
             </div>

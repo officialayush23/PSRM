@@ -31,7 +31,19 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from vertexai.generative_models import GenerationConfig, GenerativeModel
+from vertexai.generative_models import (
+    GenerationConfig,
+    GenerativeModel,
+    HarmCategory,
+    HarmBlockThreshold,
+)
+
+_SAFETY_SETTINGS = {
+    HarmCategory.HARM_CATEGORY_HATE_SPEECH:       HarmBlockThreshold.BLOCK_ONLY_HIGH,
+    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_ONLY_HIGH,
+    HarmCategory.HARM_CATEGORY_HARASSMENT:        HarmBlockThreshold.BLOCK_ONLY_HIGH,
+}
 
 from config import settings
 from db import get_db
@@ -40,8 +52,11 @@ from schemas import TokenData
 from services.notification_service import dispatch_notification
 from services.workflow_agent_service import (
     create_workflow_from_approval,
+    create_workflow_for_infra_node,
     suggest_workflows,
+    suggest_workflows_for_node,
 )
+from services.infra_node_service import parse_requirements, rebuild_summary_from_complaints
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -73,7 +88,7 @@ def _gemini(system: str, user_prompt: str, max_tokens: int = 800, temperature: f
         system_instruction=system,
         generation_config=GenerationConfig(temperature=temperature, max_output_tokens=max_tokens),
     )
-    return (model.generate_content(user_prompt).text or "").strip()
+    return (model.generate_content(user_prompt, safety_settings=_SAFETY_SETTINGS).text or "").strip()
 
 
 # ── Shared scope helper — called once per request ─────────────────
@@ -1164,13 +1179,30 @@ def get_infra_node_summary(
     complaints = db.execute(
         text("""
             SELECT c.id, c.complaint_number, c.title, c.status, c.priority,
-                   c.created_at, c.resolved_at, c.is_repeat_complaint, c.agent_summary
+                   c.created_at, c.resolved_at, c.is_repeat_complaint, c.agent_summary,
+                   c.images
             FROM complaints c
             WHERE c.infra_node_id = CAST(:nid AS uuid) AND c.is_deleted = FALSE
             ORDER BY c.created_at DESC LIMIT 30
         """),
         {"nid": str(node_id)},
     ).mappings().all()
+
+    # Aggregate ALL photos from ALL complaints on this node
+    # Each complaint.images is a JSONB array of {url, storage, mime_type}
+    all_photos = []
+    for c in complaints:
+        imgs = c["images"]
+        if imgs and isinstance(imgs, list):
+            for img in imgs:
+                if isinstance(img, dict) and img.get("url"):
+                    all_photos.append({
+                        "url":              img["url"],
+                        "mime_type":        img.get("mime_type", "image/jpeg"),
+                        "complaint_id":     str(c["id"]),
+                        "complaint_number": c["complaint_number"],
+                        "uploaded_at":      c["created_at"].isoformat() if c["created_at"] else None,
+                    })
 
     # Active workflow
     active_wf = db.execute(
@@ -1179,9 +1211,7 @@ def get_infra_node_summary(
                    wt.name AS template_name
             FROM workflow_instances wi
             JOIN workflow_templates wt ON wt.id = wi.template_id
-            JOIN workflow_complaints wc ON wc.workflow_instance_id = wi.id
-            JOIN complaints c ON c.id = wc.complaint_id
-            WHERE c.infra_node_id = CAST(:nid AS uuid)
+            WHERE wi.infra_node_id = CAST(:nid AS uuid)
               AND wi.status NOT IN ('completed','cancelled')
             ORDER BY wi.created_at DESC LIMIT 1
         """),
@@ -1203,9 +1233,16 @@ def get_infra_node_summary(
             "repeat_alert_years":    node["repeat_alert_years"],
             "lat": float(node["lat"]) if node["lat"] else None,
             "lng": float(node["lng"]) if node["lng"] else None,
-            "last_resolved_at": _ts(node["last_resolved_at"]),
+            "last_resolved_at":    _ts(node["last_resolved_at"]),
+            "cluster_summary_at":  _ts(node["cluster_summary_at"]),
+            "cluster_severity":    node["cluster_severity"],
         },
-        "active_workflow": dict(active_wf) | {"id": str(active_wf["id"])} if active_wf else None,
+        # Parsed requirements JSON — what citizens need at this node
+        "requirements": parse_requirements(node["cluster_ai_summary"]),
+        "active_workflow": (
+            {"id": str(active_wf["id"]), **{k: v for k, v in dict(active_wf).items() if k != "id"}}
+            if active_wf else None
+        ),
         "complaints": [
             {
                 "id":                  str(c["id"]),
@@ -1217,11 +1254,12 @@ def get_infra_node_summary(
                 "agent_summary":       c["agent_summary"],
                 "created_at":          _ts(c["created_at"]),
                 "resolved_at":         _ts(c["resolved_at"]),
+                "has_photos":          bool(c["images"] and len(c["images"]) > 0),
             }
             for c in complaints
         ],
-        # AI summary is a separate endpoint — triggered on demand
-        "cluster_summary": None,
+        # All photos from all linked complaints — flat list
+        "photos": all_photos,
     }
 
 
@@ -1339,25 +1377,30 @@ Return JSON with exactly these keys:
         raw = _gemini(
             "You are a Delhi infrastructure analyst. Output only valid JSON, no markdown.",
             prompt,
-            max_tokens=1000,
+            max_tokens=1500,
             temperature=0.1,
         )
-        # Strip markdown fences if any
         if "```" in raw:
             parts = raw.split("```")
             raw = parts[1] if len(parts) > 1 else parts[0]
             if raw.lstrip().startswith("json"):
                 raw = raw.lstrip()[4:]
-        result = json.loads(raw.strip())
+        raw = raw.strip()
+        # Repair truncated JSON (token limit cut the string mid-way)
+        if raw and not raw.endswith("}"):
+            open_braces   = raw.count("{") - raw.count("}")
+            open_brackets = raw.count("[") - raw.count("]")
+            raw += "]" * max(0, open_brackets) + "}" * max(0, open_braces)
+        result = json.loads(raw)
     except Exception as exc:
         logger.error("Infra node AI summary failed: %s", exc)
         result = {
-            "major_themes":          [c["title"] for c in complaints[:3]],
-            "frequency_analysis":    f"{node['total_complaint_count']} complaints filed, {open_count} still open.",
-            "criticality_assessment":f"{critical_count} critical/emergency cases. {'Immediate attention needed.' if critical_count > 0 else 'Manageable current load.'}",
-            "incident_timeline":     [],
-            "recommended_action":    "Review open complaints and assign workers to critical items.",
-            "estimated_severity":    "critical" if critical_count > 2 else "high" if open_count > 5 else "medium",
+            "major_themes":           [c["title"] for c in complaints[:3]],
+            "frequency_analysis":     f"{node['total_complaint_count']} complaints filed, {open_count} still open.",
+            "criticality_assessment": f"{critical_count} critical/emergency cases. {'Immediate attention needed.' if critical_count > 0 else 'Manageable current load.'}",
+            "incident_timeline":      [],
+            "recommended_action":     "Review open complaints and assign workers to critical items.",
+            "estimated_severity":     "critical" if critical_count > 2 else "high" if open_count > 5 else "medium",
         }
 
     return result
@@ -1768,7 +1811,9 @@ def get_admin_tasks(
                 wu.full_name AS worker_name,
                 co.company_name AS contractor_name,
                 d.name AS dept_name, d.code AS dept_code,
-                wsi.step_number, wsi.step_name
+                wsi.step_number, wsi.step_name,
+                wsi.workflow_instance_id,
+                c.infra_node_id
             FROM tasks t
             LEFT JOIN complaints c  ON c.id  = t.complaint_id
             LEFT JOIN infra_nodes n ON n.id  = c.infra_node_id
@@ -1813,8 +1858,10 @@ def get_admin_tasks(
                 "infra_type_name":  r["infra_type_name"],
                 "worker_name":      r["worker_name"],
                 "contractor_name":  r["contractor_name"],
-                "step_number":      r["step_number"],
-                "step_name":        r["step_name"],
+                "step_number":          r["step_number"],
+                "step_name":            r["step_name"],
+                "infra_node_id":         str(r["infra_node_id"]) if r["infra_node_id"] else None,
+                "workflow_instance_id":  str(r["workflow_instance_id"]) if r["workflow_instance_id"] else None,
                 "lat":  float(r["lat"]) if r["lat"] else None,
                 "lng":  float(r["lng"]) if r["lng"] else None,
                 "due_at":          _ts(r["due_at"]),
@@ -2382,3 +2429,338 @@ def deactivate_user(
         except Exception as exc:
             logger.warning("Firebase disable failed: %s", exc)
     return {"status": "deactivated", "user_id": str(user_id)}
+
+# ══════════════════════════════════════════════════════════════
+# ★ INFRA NODE — WORKFLOW SUGGESTIONS
+#   GET /admin/infra-nodes/{node_id}/workflow-suggestions
+# ══════════════════════════════════════════════════════════════
+
+@router.get("/infra-nodes/{node_id}/workflow-suggestions")
+def get_infra_node_workflow_suggestions(
+    node_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    """
+    Returns top-3 workflow suggestions for an infra node.
+    Uses the stored requirements JSON as context — fast, no complaint re-fetch.
+    """
+    _require(current_user, ADMIN_ROLES)
+
+    scope = _get_user_scope(db, str(current_user.user_id), current_user.role)
+    if not scope.get("city_id"):
+        raise HTTPException(status_code=400, detail="User city scope could not be determined")
+
+    try:
+        from services.workflow_agent_service import suggest_workflows_for_node
+        result = suggest_workflows_for_node(
+            db,
+            infra_node_id=str(node_id),
+            city_id=scope["city_id"],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    return result
+
+
+# ══════════════════════════════════════════════════════════════
+# ★ INFRA NODE — WORKFLOW APPROVE
+#   POST /admin/infra-nodes/{node_id}/workflow-approve
+# ══════════════════════════════════════════════════════════════
+
+class InfraWorkflowApproveBody(BaseModel):
+    template_id:  str
+    version_id:   str
+    edited_steps: Optional[List[Dict]] = None
+    edit_reason:  Optional[str]        = None
+
+
+@router.post("/infra-nodes/{node_id}/workflow-approve")
+def approve_infra_node_workflow(
+    node_id: UUID,
+    body: InfraWorkflowApproveBody,
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    """
+    Creates ONE workflow for the infra node and bulk-links all open complaints to it.
+    """
+    _require(current_user, ADMIN_ROLES)
+
+    existing = db.execute(
+        text("""
+            SELECT id FROM workflow_instances
+            WHERE infra_node_id = CAST(:nid AS uuid) AND status = 'active'
+            LIMIT 1
+        """),
+        {"nid": str(node_id)},
+    ).first()
+
+    if existing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Active workflow already exists for this infra node. "
+                   "Complete or cancel it before creating a new one.",
+        )
+
+    node_city = db.execute(
+        text("SELECT city_id FROM infra_nodes WHERE id = CAST(:nid AS uuid) AND is_deleted = FALSE"),
+        {"nid": str(node_id)},
+    ).first()
+    if not node_city:
+        raise HTTPException(status_code=404, detail="Infra node not found")
+
+    try:
+        from services.workflow_agent_service import create_workflow_for_infra_node
+        result = create_workflow_for_infra_node(
+            db,
+            infra_node_id=str(node_id),
+            template_id=body.template_id,
+            official_id=str(current_user.user_id),
+            city_id=str(node_city[0]),
+            edited_steps=body.edited_steps,
+            edit_reason=body.edit_reason,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    # Notify all citizens linked to this node's open complaints
+    try:
+        linked = db.execute(
+            text("""
+                SELECT c.citizen_id, c.complaint_number
+                FROM workflow_complaints wc
+                JOIN complaints c ON c.id = wc.complaint_id
+                WHERE wc.workflow_instance_id = CAST(:wid AS uuid)
+            """),
+            {"wid": result["workflow_instance_id"]},
+        ).mappings().all()
+
+        for row in linked:
+            dispatch_notification(
+                db,
+                user_id=str(row["citizen_id"]),
+                event_type="WORKFLOW_STARTED",
+                variables={"number": row["complaint_number"], "eta": "as per plan"},
+                data={"complaint_id": str(row["complaint_number"])},
+            )
+    except Exception as exc:
+        logger.warning("Bulk citizen notification failed: %s", exc)
+
+    return result
+
+
+# ══════════════════════════════════════════════════════════════
+# ★ INFRA NODE — REBUILD SUMMARY (admin repair only)
+#   POST /admin/infra-nodes/{node_id}/rebuild-summary
+# ══════════════════════════════════════════════════════════════
+
+@router.post("/infra-nodes/{node_id}/rebuild-summary")
+def rebuild_infra_node_summary(
+    node_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    """
+    Forces a full requirements rebuild from the last 20 complaints.
+    Use only to repair corrupted or missing summaries.
+    NOT called automatically — admin action only.
+    """
+    _require(current_user, {"admin", "super_admin"})
+    result = rebuild_summary_from_complaints(db, str(node_id))
+    if result.get("status") == "ai_failed":
+        raise HTTPException(status_code=502, detail="AI summary generation failed")
+    return result
+
+
+# ══════════════════════════════════════════════════════════════
+# ★ INFRA NODE TASKS — all tasks linked to a node's workflows
+#   GET /admin/infra-nodes/{node_id}/tasks
+# ══════════════════════════════════════════════════════════════
+
+@router.get("/infra-nodes/{node_id}/tasks")
+def get_infra_node_tasks(
+    node_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    """All tasks for an infra node, grouped by workflow step."""
+    _require(current_user, ADMIN_ROLES)
+
+    rows = db.execute(
+        text("""
+            SELECT
+                t.id, t.task_number, t.title, t.description,
+                t.status, t.priority, t.due_at, t.created_at,
+                t.before_photos, t.after_photos, t.progress_photos,
+                t.completion_notes,
+                wsi.step_number, wsi.step_name,
+                wsi.workflow_instance_id,
+                wi.status   AS workflow_status,
+                wi.current_step_number, wi.total_steps,
+                wt.name     AS template_name,
+                w.id        AS worker_id,
+                wu.full_name AS worker_name,
+                co.id       AS contractor_id,
+                co.company_name AS contractor_name,
+                d.name      AS dept_name, d.code AS dept_code
+            FROM tasks t
+            JOIN workflow_step_instances wsi ON wsi.id  = t.workflow_step_instance_id
+            JOIN workflow_instances      wi  ON wi.id   = wsi.workflow_instance_id
+            JOIN workflow_templates      wt  ON wt.id   = wi.template_id
+            LEFT JOIN workers       w   ON w.id   = t.assigned_worker_id
+            LEFT JOIN users         wu  ON wu.id  = w.user_id
+            LEFT JOIN contractors   co  ON co.id  = t.assigned_contractor_id
+            LEFT JOIN departments   d   ON d.id   = t.department_id
+            WHERE wi.infra_node_id = CAST(:nid AS uuid)
+              AND t.is_deleted = FALSE
+            ORDER BY wsi.step_number ASC, t.created_at ASC
+        """),
+        {"nid": str(node_id)},
+    ).mappings().all()
+
+    def _ph(v): return v if isinstance(v, list) else []
+    def _ts(v): return v.isoformat() if v else None
+
+    return {
+        "items": [
+            {
+                "id":                   str(r["id"]),
+                "task_number":          r["task_number"],
+                "title":                r["title"],
+                "description":          r["description"],
+                "status":               r["status"],
+                "priority":             r["priority"],
+                "step_number":          r["step_number"],
+                "step_name":            r["step_name"],
+                "workflow_instance_id": str(r["workflow_instance_id"]) if r["workflow_instance_id"] else None,
+                "workflow_status":      r["workflow_status"],
+                "current_step_number":  r["current_step_number"],
+                "total_steps":          r["total_steps"],
+                "template_name":        r["template_name"],
+                "worker_id":            str(r["worker_id"]) if r["worker_id"] else None,
+                "worker_name":          r["worker_name"],
+                "contractor_id":        str(r["contractor_id"]) if r["contractor_id"] else None,
+                "contractor_name":      r["contractor_name"],
+                "dept_name":            r["dept_name"],
+                "dept_code":            r["dept_code"],
+                "due_at":               _ts(r["due_at"]),
+                "created_at":           _ts(r["created_at"]),
+                "before_photos":        _ph(r["before_photos"]),
+                "after_photos":         _ph(r["after_photos"]),
+                "progress_photos":      _ph(r["progress_photos"]),
+                "completion_notes":     r["completion_notes"],
+            }
+            for r in rows
+        ]
+    }
+
+
+# ══════════════════════════════════════════════════════════════
+# ★ WORKFLOW WORKER ASSIGNMENT — assign all or per-step
+#   POST /admin/workflow-instances/{wid}/assign-workers
+# ══════════════════════════════════════════════════════════════
+
+class WorkflowWorkerAssignBody(BaseModel):
+    worker_id:         Optional[str]            = None  # assign ALL steps
+    contractor_id:     Optional[str]            = None  # or all to contractor
+    step_assignments:  Optional[List[Dict[str, Any]]] = None  # [{step_number, worker_id, contractor_id}]
+
+@router.post("/workflow-instances/{wid}/assign-workers")
+def assign_workflow_workers(
+    wid: UUID,
+    body: WorkflowWorkerAssignBody,
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    """
+    Assigns workers to a workflow instance.
+
+    body.worker_id           → assign ALL steps/tasks to this worker
+    body.contractor_id       → assign ALL steps/tasks to this contractor
+    body.step_assignments    → [{step_number, worker_id?, contractor_id?}] per-step
+    """
+    _require(current_user, ADMIN_ROLES)
+
+    # Count tasks in this workflow
+    task_rows = db.execute(
+        text("""
+            SELECT t.id, wsi.step_number
+            FROM tasks t
+            JOIN workflow_step_instances wsi ON wsi.id = t.workflow_step_instance_id
+            WHERE wsi.workflow_instance_id = CAST(:wid AS uuid) AND t.is_deleted = FALSE
+        """),
+        {"wid": str(wid)},
+    ).mappings().all()
+
+    if not task_rows:
+        raise HTTPException(status_code=404, detail="No tasks found for this workflow")
+
+    assigned_count = 0
+
+    if body.worker_id or body.contractor_id:
+        # Assign all tasks to one worker/contractor
+        db.execute(
+            text("""
+                UPDATE tasks t
+                SET assigned_worker_id     = CAST(:w AS uuid),
+                    assigned_contractor_id = CAST(:c AS uuid),
+                    status     = CASE WHEN status = 'pending' THEN 'accepted' ELSE status END,
+                    override_by = CAST(:by AS uuid),
+                    updated_at  = NOW()
+                FROM workflow_step_instances wsi
+                WHERE t.workflow_step_instance_id = wsi.id
+                  AND wsi.workflow_instance_id = CAST(:wid AS uuid)
+                  AND t.is_deleted = FALSE
+            """),
+            {"wid": str(wid), "w": body.worker_id, "c": body.contractor_id, "by": str(current_user.user_id)},
+        )
+        assigned_count = len(task_rows)
+
+        if body.worker_id:
+            db.execute(
+                text("UPDATE workers SET current_task_count = current_task_count + :n, updated_at=NOW() WHERE id=CAST(:wid AS uuid)"),
+                {"wid": body.worker_id, "n": assigned_count},
+            )
+            worker_user = db.execute(
+                text("SELECT user_id FROM workers WHERE id = CAST(:wid AS uuid)"),
+                {"wid": body.worker_id},
+            ).scalar()
+            if worker_user:
+                try:
+                    dispatch_notification(
+                        db, user_id=str(worker_user),
+                        event_type="TASK_ASSIGNED",
+                        variables={"task_title": f"{assigned_count} workflow tasks"},
+                        data={"workflow_instance_id": str(wid)},
+                    )
+                except Exception as exc:
+                    logger.warning("Worker assign notification failed: %s", exc)
+
+    elif body.step_assignments:
+        for sa in body.step_assignments:
+            step_num = sa.get("step_number")
+            w_id = sa.get("worker_id")
+            c_id = sa.get("contractor_id")
+            if not step_num or not (w_id or c_id):
+                continue
+            db.execute(
+                text("""
+                    UPDATE tasks t
+                    SET assigned_worker_id     = CAST(:w AS uuid),
+                        assigned_contractor_id = CAST(:c AS uuid),
+                        status  = CASE WHEN status='pending' THEN 'accepted' ELSE status END,
+                        updated_at = NOW()
+                    FROM workflow_step_instances wsi
+                    WHERE t.workflow_step_instance_id = wsi.id
+                      AND wsi.workflow_instance_id = CAST(:wid AS uuid)
+                      AND wsi.step_number = :sn
+                      AND t.is_deleted = FALSE
+                """),
+                {"wid": str(wid), "w": w_id, "c": c_id, "sn": step_num},
+            )
+            assigned_count += 1
+
+    db.commit()
+    return {"assigned_count": assigned_count, "workflow_instance_id": str(wid)}

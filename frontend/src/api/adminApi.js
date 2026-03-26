@@ -289,12 +289,71 @@ export async function fetchNodeRepeatIssues(nodeId) {
   return data;
 }
 
-// ── Workflow learning save ───────────────────────────────────────
+// ── Infra node node-level workflow (infra-centric, not per-complaint) ─────────
+
+/**
+ * Get workflow suggestions for an infra node (uses stored AI requirements).
+ * Returns { suggestions, has_active_workflow, active_workflow_id, cluster_summary, open_complaint_count }
+ */
+export async function fetchInfraNodeWorkflowSuggestions(nodeId) {
+  const { data } = await client.get(`/admin/infra-nodes/${nodeId}/workflow-suggestions`);
+  return data;
+}
+
+/**
+ * Create ONE workflow for the entire infra node.
+ * Bulk-links ALL open complaints to it automatically.
+ */
+export async function approveInfraNodeWorkflow(nodeId, { templateId, versionId, editedSteps = null, editReason = null } = {}) {
+  const { data } = await client.post(`/admin/infra-nodes/${nodeId}/workflow-approve`, {
+    template_id:  templateId,
+    version_id:   versionId,
+    edited_steps: editedSteps,
+    edit_reason:  editReason,
+  });
+  return data;
+}
+
+/**
+ * Force a full requirements rebuild from last 20 complaints.
+ * Admin/super_admin only. Use only for data repair.
+ */
+export async function rebuildNodeSummary(nodeId) {
+  const { data } = await client.post(`/admin/infra-nodes/${nodeId}/rebuild-summary`);
+  return data;
+}
+
+// ── Workflow learning save ────────────────────────────────────────
 
 export async function saveWorkflowLearning(workflowInstanceId, { edit_reason, edited_steps } = {}) {
   const { data } = await client.post(`/admin/workflows/${workflowInstanceId}/save-learning`, {
     edit_reason,
     edited_steps,
   });
+  return data;
+}
+
+// ── Infra node tasks ─────────────────────────────────────────────
+
+/**
+ * All tasks for an infra node (via its workflow instances).
+ * Returns { items: [{id, step_number, step_name, workflow_instance_id, status, worker_name, ...}] }
+ */
+export async function fetchInfraNodeTasks(nodeId) {
+  const { data } = await client.get(`/admin/infra-nodes/${nodeId}/tasks`);
+  return data;
+}
+
+// ── Workflow worker assignment ────────────────────────────────────
+
+/**
+ * Assign workers to a workflow instance.
+ *
+ * body.worker_id      → assign ALL steps to this worker
+ * body.contractor_id  → assign ALL steps to this contractor
+ * body.step_assignments → [{step_number, worker_id?, contractor_id?}] for per-step
+ */
+export async function assignWorkflowWorkers(workflowInstanceId, body = {}) {
+  const { data } = await client.post(`/admin/workflow-instances/${workflowInstanceId}/assign-workers`, body);
   return data;
 }

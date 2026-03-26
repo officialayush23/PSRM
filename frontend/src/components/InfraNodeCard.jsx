@@ -15,6 +15,14 @@ const STATUS_DOT = {
   inactive:     { color: "#64748b", label: "Inactive" },
 };
 
+const SEV_COLOR = { critical:"#ef4444", high:"#f87171", medium:"#fb923c", low:"#34d399" };
+
+/** Parse cluster_ai_summary — may be JSON string or legacy plain text */
+function parseRequirements(raw) {
+  if (!raw) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
 function HealthBar({ score }) {
   if (score == null) return null;
   const pct = Math.round(Math.min(100, Math.max(0, score)));
@@ -36,13 +44,14 @@ function HealthBar({ score }) {
 export default function InfraNodeCard({ node, onSelect }) {
   if (!node) return null;
 
-  const sev    = SEVERITY_GLOW[node.cluster_severity] || SEVERITY_GLOW.low;
+  // Determine severity — prefer structured requirements, fall back to cluster_severity column
+  const reqs = parseRequirements(node.cluster_ai_summary);
+  const severityKey = reqs?.overall_severity || node.cluster_severity || "low";
+  const sev    = SEVERITY_GLOW[severityKey] || SEVERITY_GLOW.low;
   const status = STATUS_DOT[node.status] || { color: "#64748b", label: node.status || "Unknown" };
-  const themes = Array.isArray(node.cluster_major_themes)
+  const themes = reqs?.themes || (Array.isArray(node.cluster_major_themes)
     ? node.cluster_major_themes
-    : typeof node.cluster_major_themes === "string"
-    ? (() => { try { return JSON.parse(node.cluster_major_themes); } catch { return []; } })()
-    : [];
+    : []);
 
   return (
     <article
@@ -92,10 +101,44 @@ export default function InfraNodeCard({ node, onSelect }) {
         <HealthBar score={node.health_score} />
       </div>
 
-      {/* AI cluster summary */}
-      {node.cluster_ai_summary && (
+      {/* Requirements — structured (new format) */}
+      {reqs ? (
+        <div className="rounded-xl p-2.5 mb-3"
+          style={{ background: sev.glow, border: `1px solid ${sev.border}` }}>
+          <p className="text-[10px] font-bold uppercase tracking-wider mb-1.5" style={{ color: sev.text }}>
+            Requirements · {sev.label}
+          </p>
+          {reqs.brief && (
+            <p className="text-[11px] text-slate-600 leading-snug mb-2">{reqs.brief}</p>
+          )}
+          {/* Top 2 requirements as pills */}
+          <div className="flex flex-col gap-1">
+            {(reqs.requirements || []).slice(0, 2).map((r, i) => (
+              <div key={i} className="flex items-center justify-between gap-2">
+                <p className="text-[10px] text-slate-600 truncate flex-1">{r.issue}</p>
+                <div className="flex items-center gap-1 shrink-0">
+                  {r.count > 1 && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full"
+                      style={{ background: "rgba(0,0,0,0.06)", color: "#64748b" }}>
+                      ×{r.count}
+                    </span>
+                  )}
+                  <span className="w-1.5 h-1.5 rounded-full shrink-0"
+                    style={{ background: SEV_COLOR[r.severity] || "#94a3b8" }} />
+                </div>
+              </div>
+            ))}
+            {(reqs.requirements || []).length > 2 && (
+              <p className="text-[9px] text-slate-500 mt-0.5">
+                +{reqs.requirements.length - 2} more requirement{reqs.requirements.length - 2 > 1 ? "s" : ""}
+              </p>
+            )}
+          </div>
+        </div>
+      ) : node.cluster_ai_summary && (
+        /* Legacy plain-text summary fallback */
         <div className="rounded-xl p-2.5 mb-3 text-xs"
-          style={{ background: `${sev.glow}`, border: `1px solid ${sev.border}` }}>
+          style={{ background: sev.glow, border: `1px solid ${sev.border}` }}>
           <p className="text-[10px] font-bold uppercase tracking-wider mb-1" style={{ color: sev.text }}>
             AI Summary · {sev.label}
           </p>
@@ -103,7 +146,7 @@ export default function InfraNodeCard({ node, onSelect }) {
         </div>
       )}
 
-      {/* Major themes */}
+      {/* Themes */}
       {themes.length > 0 && (
         <div className="flex flex-wrap gap-1 mb-3">
           {themes.slice(0, 3).map((t, i) => (

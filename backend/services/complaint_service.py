@@ -641,7 +641,10 @@ async def ingest_complaint_fast(
     try:
         from services.infra_node_service import update_infra_node_summary
 
-        update_infra_node_summary(db, infra_node_id)
+        # Pass new complaint text so high-volume nodes get cheap incremental updates
+        # instead of re-fetching all 15 complaints on every ingest.
+        new_complaint_text = f"{request.title}: {translated_description[:300]}"
+        update_infra_node_summary(db, infra_node_id, new_complaint_text=new_complaint_text)
     except Exception as exc:
         logger.warning("Node summary update failed (non-critical): %s", exc)
 

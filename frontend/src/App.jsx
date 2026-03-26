@@ -15,6 +15,7 @@ import PublicMapPage        from "./pages/PublicMapPage";
 import SignupPage           from "./pages/SignupPage";
 import SubmitComplaintPage  from "./pages/SubmitComplaintPage";
 import SurveyPage           from "./pages/SurveyPage";
+import InfraNodeDetailPage  from "./pages/InfraNodeDetailPage";
 
 // Role-specific dashboards
 import OfficialDashboardPage from "./pages/admin/OfficialDashboardPage";
@@ -72,6 +73,16 @@ export default function App() {
 
       {/* Survey accessible via notification link; API enforces auth */}
       <Route path="/survey/:surveyInstanceId" element={<SurveyPage />} />
+
+      {/* Infra node detail — accessible to admin roles */}
+      <Route
+        path="/infra-nodes/:nodeId"
+        element={
+          <ProtectedRoute roles={["admin", "super_admin", "official"]}>
+            <InfraNodeDetailPage />
+          </ProtectedRoute>
+        }
+      />
 
       {/* ── Role-based dashboard ── */}
       <Route

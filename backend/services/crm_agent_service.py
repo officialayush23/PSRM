@@ -25,12 +25,28 @@ from typing import Any, Dict, List, Optional
 import vertexai
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-from vertexai.generative_models import GenerationConfig, GenerativeModel
+from vertexai.generative_models import (
+    GenerationConfig,
+    GenerativeModel,
+    HarmCategory,
+    HarmBlockThreshold,
+)
 
 from config import settings
 
 logger = logging.getLogger(__name__)
 _vertex_initialized = False
+
+# Safety settings — civic infrastructure data (words like "damaged", "hazard",
+# "emergency", "broken pipe") triggers Vertex AI's DANGEROUS_CONTENT filter at
+# default thresholds. Set all categories to BLOCK_ONLY_HIGH so legitimate
+# municipal operations data passes through.
+_SAFETY_SETTINGS = {
+    HarmCategory.HARM_CATEGORY_HATE_SPEECH:       HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT: HarmBlockThreshold.BLOCK_NONE,
+    HarmCategory.HARM_CATEGORY_HARASSMENT:        HarmBlockThreshold.BLOCK_NONE,
+}
 
 
 def _ensure_vertex():
@@ -49,7 +65,10 @@ def _call_gemini(system: str, prompt: str, max_tokens: int = 4096, temperature: 
         generation_config=GenerationConfig(temperature=temperature, max_output_tokens=max_tokens),
     )
     try:
-        response = model.generate_content(prompt)
+        response = model.generate_content(
+            prompt,
+            safety_settings=_SAFETY_SETTINGS,
+        )
 
         if not response.candidates:
             logger.warning("Gemini returned no candidates - response may be blocked")
@@ -58,7 +77,20 @@ def _call_gemini(system: str, prompt: str, max_tokens: int = 4096, temperature: 
         candidate = response.candidates[0]
         if not candidate.content or not candidate.content.parts:
             finish_reason = getattr(candidate, "finish_reason", "UNKNOWN")
-            logger.warning("Gemini returned empty content. finish_reason=%s", finish_reason)
+            # finish_reason=2 means SAFETY — log which category triggered it
+            if str(finish_reason) in ("2", "SAFETY"):
+                safety_ratings = getattr(candidate, "safety_ratings", [])
+                blocked = [
+                    f"{r.category.name}={r.probability.name}"
+                    for r in safety_ratings
+                    if hasattr(r, "blocked") and r.blocked
+                ]
+                logger.warning(
+                    "Gemini SAFETY block. Blocked categories: %s",
+                    blocked or "unknown",
+                )
+            else:
+                logger.warning("Gemini returned empty content. finish_reason=%s", finish_reason)
             return ""
 
         return (response.text or "").strip()
@@ -305,9 +337,26 @@ def get_daily_briefing(db: Session, user_id: str, role: str) -> Dict[str, Any]:
 
     greeting = "Namaskar! Here is your morning briefing."
     try:
+        # Build a clean, filter-safe context — drop raw AI summaries which contain
+        # civic keywords (damaged, hazard, broken) that trigger DANGEROUS_CONTENT.
+        safe_ctx = {
+            "user_name": ctx["user_name"],
+            "role": role,
+            "kpi": ctx.get("kpi", {}),
+            "oldest_open": [
+                {k: v for k, v in c.items() if k != "cluster_ai_summary"}
+                for c in ctx.get("oldest_open", [])
+            ],
+            "stale_tasks":  ctx.get("stale_tasks", []),
+            "survey_alerts": ctx.get("survey_alerts", []),
+            "infra_alerts": [
+                {k: v for k, v in n.items() if k != "cluster_ai_summary"}
+                for n in ctx.get("infra_alerts", [])
+            ],
+        }
         raw = _call_gemini(
             "You are PS-CRM, a concise municipal operations assistant for Delhi. Be direct and actionable. Plain text, no bullet points, no markdown.",
-            f"Write a 3-4 sentence morning briefing for {ctx['user_name']} ({role}).\n\nDATA:\n{json.dumps(ctx, default=str, indent=2)}",
+            f"Write a 3-4 sentence morning briefing for {ctx['user_name']} ({role}).\n\nDATA:\n{json.dumps(safe_ctx, default=str, indent=2)}",
             max_tokens=300, temperature=0.3,
         )
         if raw:

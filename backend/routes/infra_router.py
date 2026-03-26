@@ -10,6 +10,7 @@ from db import get_db
 from dependencies import get_current_user
 from schemas import TokenData
 from services.complaint_cluster_service import get_cluster_for_node
+from services.infra_node_service import parse_requirements
 
 router = APIRouter(prefix="/infra", tags=["Infra"])
 
@@ -288,6 +289,8 @@ def get_infra_nodes_map(
                 "cluster_ai_summary": r["cluster_ai_summary"],
                 "cluster_severity": r["cluster_severity"],
                 "cluster_major_themes": r["cluster_major_themes"] or [],
+                # Parsed requirements object for frontend — same data, structured
+                "requirements": parse_requirements(r["cluster_ai_summary"]),
             },
         }
         for r in rows
@@ -551,11 +554,62 @@ def get_node_cluster(
     current_user: TokenData = Depends(get_current_user),
 ):
     """
-    Returns the complaint cluster for an infra node — all grouped complaints
-    with their summaries so the official gets the full picture.
+    Returns the complaint cluster for an infra node — all grouped complaints,
+    parsed requirements JSON, and aggregated photos from all complaints.
     """
     _require(current_user, ADMIN_ROLES)
     cluster = get_cluster_for_node(db, str(node_id))
+
+    # Parse requirements from infra node
+    node_row = db.execute(
+        text("""
+            SELECT cluster_ai_summary, cluster_severity, cluster_summary_at
+            FROM infra_nodes WHERE id = CAST(:nid AS uuid) AND is_deleted = FALSE
+        """),
+        {"nid": str(node_id)},
+    ).mappings().first()
+
+    requirements = parse_requirements(node_row["cluster_ai_summary"]) if node_row else None
+
+    # Aggregate all photos from all complaints on this node
+    photo_rows = db.execute(
+        text("""
+            SELECT c.id, c.complaint_number, c.images, c.created_at
+            FROM complaints c
+            WHERE c.infra_node_id = CAST(:nid AS uuid)
+              AND c.is_deleted = FALSE
+              AND jsonb_array_length(COALESCE(c.images, '[]'::jsonb)) > 0
+            ORDER BY c.created_at DESC
+        """),
+        {"nid": str(node_id)},
+    ).mappings().all()
+
+    all_photos = []
+    for row in photo_rows:
+        imgs = row["images"]
+        if imgs and isinstance(imgs, list):
+            for img in imgs:
+                if isinstance(img, dict) and img.get("url"):
+                    all_photos.append({
+                        "url":              img["url"],
+                        "mime_type":        img.get("mime_type", "image/jpeg"),
+                        "complaint_id":     str(row["id"]),
+                        "complaint_number": row["complaint_number"],
+                        "uploaded_at":      row["created_at"].isoformat() if row["created_at"] else None,
+                    })
+
     if not cluster:
-        return {"cluster_id": None, "complaint_count": 0, "cluster_summary": None, "members": []}
-    return cluster
+        return {
+            "cluster_id":      None,
+            "complaint_count": 0,
+            "cluster_summary": None,
+            "requirements":    requirements,
+            "photos":          all_photos,
+            "members":         [],
+        }
+
+    return {
+        **cluster,
+        "requirements": requirements,
+        "photos":        all_photos,
+    }

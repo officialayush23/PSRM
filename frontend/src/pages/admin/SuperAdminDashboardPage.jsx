@@ -73,12 +73,37 @@ function KpiCard({ label, value, sub, color, icon }) {
 }
 
 const TABS = [
-  { key:"overview", label:"Overview",      icon:"dashboard" },
-  { key:"staff",    label:"Staff",         icon:"group" },
-  { key:"map",      label:"Map & Nodes",   icon:"map" },
-  { key:"tenders",  label:"Tenders",       icon:"gavel" },
-  { key:"alerts",   label:"Alerts",        icon:"notification_important" },
+  { key:"overview",   label:"Overview",    icon:"dashboard" },
+  { key:"operations", label:"Operations",  icon:"task_alt" },
+  { key:"users",      label:"Users",       icon:"manage_accounts" },
+  { key:"staff",      label:"Staff",       icon:"group" },
+  { key:"map",        label:"Map & Nodes", icon:"map" },
+  { key:"tenders",    label:"Tenders",     icon:"gavel" },
+  { key:"alerts",     label:"Alerts",      icon:"notification_important" },
 ];
+
+const TASK_STATUS_STYLE = {
+  pending:     { color:"#facc15", bg:"rgba(250,204,21,0.15)" },
+  accepted:    { color:"#38bdf8", bg:"rgba(56,189,248,0.15)" },
+  in_progress: { color:"#818cf8", bg:"rgba(129,140,248,0.15)" },
+  completed:   { color:"#34d399", bg:"rgba(52,211,153,0.15)" },
+  cancelled:   { color:"#94a3b8", bg:"rgba(148,163,184,0.15)" },
+};
+const PRIORITY_STYLE = {
+  emergency: { color:"#ef4444", bg:"rgba(239,68,68,0.15)" },
+  critical:  { color:"#f97316", bg:"rgba(249,115,22,0.15)" },
+  high:      { color:"#fb923c", bg:"rgba(251,146,60,0.12)" },
+  normal:    { color:"#94a3b8", bg:"rgba(148,163,184,0.12)" },
+  low:       { color:"#64748b", bg:"rgba(100,116,139,0.1)" },
+};
+function TaskStatusBadge({ status }) {
+  const s = TASK_STATUS_STYLE[status] || { color:"#64748b", bg:"rgba(0,0,0,0.1)" };
+  return <span className="text-[10px] px-2 py-0.5 rounded-full font-bold" style={{ background:s.bg, color:s.color }}>{status?.replace("_"," ")}</span>;
+}
+function PriorityBadge({ priority }) {
+  const s = PRIORITY_STYLE[priority] || { color:"#64748b", bg:"rgba(0,0,0,0.1)" };
+  return <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wide" style={{ background:s.bg, color:s.color }}>{priority}</span>;
+}
 
 // ── Staff profile drawer ──────────────────────────────────────────
 function StaffProfileDrawer({ user, departments, jurisdictions, onClose, onSave, onDeactivate }) {
@@ -246,37 +271,86 @@ export default function SuperAdminDashboardPage() {
   const [selectedNode, setSelectedNode] = useState(null);
   const [nodeDetail, setNodeDetail] = useState(null);
   const [nodeLoading, setNodeLoading] = useState(false);
+  // ── Operations tab state ──────────────────────────────────────
+  const [opTasks, setOpTasks] = useState([]);
+  const [opLoading, setOpLoading] = useState(false);
+  const [opStatusFilter, setOpStatusFilter] = useState("");
+  const [opLoaded, setOpLoaded] = useState(false);
+  // ── Users tab state ───────────────────────────────────────────
+  const [createUserOpen, setCreateUserOpen] = useState(false);
+  const [usersSearch, setUsersSearch] = useState("");
+  const [usersRoleFilter, setUsersRoleFilter] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
-    try {
-      const [kpiRes, staffRes, deptRes, mapRes, tendersRes, alertsRes, workersRes] = await Promise.all([
-        fetchAdminKPI(),
-        fetchStaffUsers(),
-        fetchDepartments(),
-        fetchInfraNodeMap(),
-        fetchTenders({ status:"submitted", limit:50 }),
-        fetchCriticalAlerts({ limit:50 }),
-        fetchAvailableWorkers(),
-      ]);
-      setKpi(kpiRes);
-      setStaff(Array.isArray(staffRes) ? staffRes : staffRes?.items || []);
-      setDepartments(Array.isArray(deptRes) ? deptRes : deptRes?.items || []);
-      setMapNodes(mapRes || { type:"FeatureCollection", features:[] });
-      setTenders(Array.isArray(tendersRes) ? tendersRes : tendersRes?.items || []);
-      setAlerts(Array.isArray(alertsRes?.items) ? alertsRes.items : []);
-      setWorkers(Array.isArray(workersRes) ? workersRes : []);
+    // ── Per-call safe wrapper with full debug logging ────────────
+    const safeCall = (p, name) =>
+      p.catch(e => {
+        console.error(`[Dashboard] ${name} FAILED`, {
+          status:  e?.response?.status,
+          url:     e?.config?.url,
+          data:    e?.response?.data,
+          message: e?.message,
+        });
+        return null;
+      });
 
-      // Jurisdictions separate to avoid crashing
-      try {
-        const j = await fetchJurisdictions();
-        setJurisdictions(Array.isArray(j) ? j : []);
-      } catch {}
-    } catch { toast.error("Failed to load dashboard data"); }
-    finally { setLoading(false); }
+    const [kpiRes, staffRes, deptRes, mapRes, tendersRes, alertsRes, workersRes] =
+      await Promise.all([
+        safeCall(fetchAdminKPI(),                                "KPI"),
+        safeCall(fetchStaffUsers(),                              "StaffUsers"),
+        safeCall(fetchDepartments(),                             "Departments"),
+        safeCall(fetchInfraNodeMap(),                            "InfraNodeMap"),
+        safeCall(fetchTenders({ status:"submitted", limit:50 }), "Tenders"),
+        safeCall(fetchCriticalAlerts({ limit:50 }),              "CriticalAlerts"),
+        safeCall(fetchAvailableWorkers(),                        "AvailableWorkers"),
+      ]);
+
+    if (kpiRes  !== null) setKpi(kpiRes);
+    setStaff(Array.isArray(staffRes) ? staffRes : staffRes?.items || []);
+    setDepartments(Array.isArray(deptRes) ? deptRes : deptRes?.items || []);
+    setMapNodes(mapRes || { type:"FeatureCollection", features:[] });
+    setTenders(Array.isArray(tendersRes) ? tendersRes : tendersRes?.items || []);
+    setAlerts(Array.isArray(alertsRes?.items) ? alertsRes.items : []);
+    setWorkers(Array.isArray(workersRes) ? workersRes : []);
+
+    try {
+      const j = await fetchJurisdictions();
+      setJurisdictions(Array.isArray(j) ? j : []);
+    } catch(e) {
+      console.error("[Dashboard] fetchJurisdictions FAILED", {
+        status: e?.response?.status, message: e?.message,
+      });
+    }
+    setLoading(false);
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // ── Operations: lazy-load tasks when tab is active ────────────
+  const loadTasks = useCallback(async () => {
+    setOpLoading(true);
+    try {
+      const res = await fetchAdminTaskList({ status: opStatusFilter || undefined, limit:100 });
+      console.log("[Operations] response:", res);
+      setOpTasks(Array.isArray(res?.items) ? res.items : Array.isArray(res) ? res : []);
+      setOpLoaded(true);
+    } catch(e) {
+      console.error("[Operations] fetchAdminTaskList FAILED", {
+        status:  e?.response?.status,
+        url:     e?.config?.url,
+        data:    e?.response?.data,
+        message: e?.message,
+      });
+      toast.error("Failed to load operations data");
+    } finally {
+      setOpLoading(false);
+    }
+  }, [opStatusFilter]);
+
+  useEffect(() => {
+    if (activeTab === "operations") loadTasks();
+  }, [activeTab, loadTasks]);
 
   // Load infra node detail when selected
   useEffect(() => {
@@ -299,6 +373,20 @@ export default function SuperAdminDashboardPage() {
     }
     return s;
   }, [staff, staffFilter, staffSearch]);
+
+  const filteredUsersTab = useMemo(() => {
+    let s = staff;
+    if (usersRoleFilter) s = s.filter(u => u.role === usersRoleFilter);
+    if (usersSearch) {
+      const q = usersSearch.toLowerCase();
+      s = s.filter(u =>
+        u.full_name?.toLowerCase().includes(q) ||
+        u.email?.toLowerCase().includes(q) ||
+        u.dept_name?.toLowerCase().includes(q)
+      );
+    }
+    return s;
+  }, [staff, usersRoleFilter, usersSearch]);
 
   const summary = kpi?.summary || {};
   const tasks = kpi?.tasks || {};
@@ -343,6 +431,26 @@ export default function SuperAdminDashboardPage() {
                 {alerts.length} alerts
               </span>
             )}
+            <button
+              title="Test SMTP email configuration"
+              onClick={async () => {
+                try {
+                  const { data } = await import("../../api/client").then(m =>
+                    m.default.post("/admin/debug/email-test")
+                  );
+                  console.log("[EmailTest] result:", data);
+                  if (data.status === "sent") toast.success(`Test email sent to ${data.to}`);
+                  else if (data.status === "skipped") toast.warning(`SMTP not configured: ${data.reason}`);
+                  else toast.error(`Email test failed: ${data.error || data.status} — check console`);
+                } catch(e) {
+                  console.error("[EmailTest] error:", e?.response?.data, e?.message);
+                  toast.error("Email test request failed — check console");
+                }
+              }}
+              className="p-2 rounded-xl text-slate-500 hover:text-slate-300 transition-colors"
+              style={{ background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.06)" }}>
+              <span className="material-symbols-outlined text-[18px]">mail</span>
+            </button>
           </div>
         </div>
 
@@ -425,6 +533,94 @@ export default function SuperAdminDashboardPage() {
           </div>
         )}
 
+        {/* ── OPERATIONS ── */}
+        {activeTab === "operations" && (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between flex-wrap gap-3">
+              <div className="flex gap-2 flex-wrap">
+                {["","pending","accepted","in_progress","completed","cancelled"].map(s => (
+                  <button key={s} onClick={() => setOpStatusFilter(s)}
+                    className="px-3 py-2 rounded-xl text-xs font-bold transition-all"
+                    style={{
+                      background: opStatusFilter===s ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.04)",
+                      color:      opStatusFilter===s ? "#818cf8" : "#64748b",
+                      border:     `1px solid ${opStatusFilter===s ? "rgba(99,102,241,0.3)" : "rgba(255,255,255,0.06)"}`,
+                    }}>
+                    {s || "All"}
+                  </button>
+                ))}
+              </div>
+              <button onClick={loadTasks} disabled={opLoading}
+                className={`${S.btn} ${S.btnGhost}`}>
+                <span className="material-symbols-outlined text-[16px]">refresh</span>
+                Refresh
+              </button>
+            </div>
+
+            <div className="rounded-2xl overflow-hidden" style={{ border:"1px solid rgba(255,255,255,0.07)" }}>
+              <table className="w-full">
+                <thead>
+                  <tr style={{ background:"rgba(255,255,255,0.03)", borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
+                    <th className={S.th}>Task #</th>
+                    <th className={S.th}>Title / Complaint</th>
+                    <th className={S.th}>Status</th>
+                    <th className={S.th}>Priority</th>
+                    <th className={S.th}>Department</th>
+                    <th className={S.th}>Assigned To</th>
+                    <th className={S.th}>Due</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {opLoading ? (
+                    Array(6).fill(0).map((_,i) => (
+                      <tr key={i} style={{ borderBottom:"1px solid rgba(255,255,255,0.04)" }}>
+                        {Array(7).fill(0).map((_,j) => (
+                          <td key={j} className="px-4 py-3">
+                            <div className="h-4 rounded animate-pulse" style={{ background:"rgba(255,255,255,0.06)" }} />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  ) : opTasks.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="text-center py-16 text-slate-500">
+                        <span className="material-symbols-outlined text-4xl block mb-2 opacity-40">task_alt</span>
+                        {opLoaded ? "No tasks found" : "Select a filter to load tasks"}
+                      </td>
+                    </tr>
+                  ) : opTasks.map(t => (
+                    <tr key={t.id} style={{ borderBottom:"1px solid rgba(255,255,255,0.04)" }}
+                      className="hover:bg-white/[0.02] transition-colors">
+                      <td className="px-4 py-3">
+                        <span className="text-xs font-mono text-indigo-400">{t.task_number || "—"}</span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-sm font-semibold text-slate-200 truncate max-w-[200px]">{t.title}</p>
+                        {t.complaint_number && <p className="text-[11px] text-slate-500">#{t.complaint_number}</p>}
+                        {t.address_text && <p className="text-[11px] text-slate-600 truncate max-w-[200px]">{t.address_text}</p>}
+                      </td>
+                      <td className="px-4 py-3"><TaskStatusBadge status={t.status} /></td>
+                      <td className="px-4 py-3"><PriorityBadge priority={t.priority} /></td>
+                      <td className="px-4 py-3 text-xs text-slate-400">{t.dept_name || "—"}</td>
+                      <td className="px-4 py-3 text-xs text-slate-400">
+                        {t.worker_name || t.contractor_name || (
+                          <span className="text-slate-600 italic">Unassigned</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-slate-500">
+                        {t.due_at ? new Date(t.due_at).toLocaleDateString("en-IN") : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {!opLoading && opLoaded && (
+              <p className="text-xs text-slate-600 text-center">{opTasks.length} task{opTasks.length !== 1 ? "s" : ""}</p>
+            )}
+          </div>
+        )}
+
         {/* ── STAFF ── */}
         {activeTab === "staff" && (
           <div className="flex flex-col gap-4">
@@ -500,6 +696,111 @@ export default function SuperAdminDashboardPage() {
               </div>
             )}
             <p className="text-xs text-slate-600 text-center">{filteredStaff.length} of {staff.length} staff</p>
+          </div>
+        )}
+
+        {/* ── USERS ── */}
+        {activeTab === "users" && (
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
+              <div className="flex flex-col sm:flex-row gap-3 flex-1">
+                <input value={usersSearch} onChange={e => setUsersSearch(e.target.value)}
+                  placeholder="Search name, email, department…"
+                  className={`${S.input} flex-1`} />
+                <div className="flex gap-2 flex-wrap">
+                  {["","official","admin","worker","contractor","super_admin"].map(r => (
+                    <button key={r} onClick={() => setUsersRoleFilter(r)}
+                      className="px-3 py-2 rounded-xl text-xs font-bold transition-all"
+                      style={{
+                        background: usersRoleFilter===r ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.04)",
+                        color:      usersRoleFilter===r ? "#818cf8" : "#64748b",
+                        border:     `1px solid ${usersRoleFilter===r ? "rgba(99,102,241,0.3)" : "rgba(255,255,255,0.06)"}`,
+                      }}>
+                      {r || "All"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button onClick={() => setCreateUserOpen(true)}
+                className={`${S.btn} ${S.btnPrimary} flex-shrink-0`}>
+                <span className="material-symbols-outlined text-[16px]">person_add</span>
+                Create User
+              </button>
+            </div>
+
+            <div className="rounded-2xl overflow-hidden" style={{ border:"1px solid rgba(255,255,255,0.07)" }}>
+              <table className="w-full">
+                <thead>
+                  <tr style={{ background:"rgba(255,255,255,0.03)", borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
+                    <th className={S.th}>User</th>
+                    <th className={S.th}>Role</th>
+                    <th className={S.th}>Department</th>
+                    <th className={S.th}>Status</th>
+                    <th className={S.th}>Auth</th>
+                    <th className={S.th}></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    Array(5).fill(0).map((_,i) => (
+                      <tr key={i} style={{ borderBottom:"1px solid rgba(255,255,255,0.04)" }}>
+                        {Array(6).fill(0).map((_,j) => (
+                          <td key={j} className="px-4 py-3">
+                            <div className="h-4 rounded animate-pulse" style={{ background:"rgba(255,255,255,0.06)" }} />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  ) : filteredUsersTab.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="text-center py-16 text-slate-500">
+                        <span className="material-symbols-outlined text-4xl block mb-2 opacity-40">manage_accounts</span>
+                        No users found
+                      </td>
+                    </tr>
+                  ) : filteredUsersTab.map(u => {
+                    const m = ROLE_META[u.role] || ROLE_META.official;
+                    return (
+                      <tr key={u.id} style={{ borderBottom:"1px solid rgba(255,255,255,0.04)" }}
+                        className="hover:bg-white/[0.02] transition-colors">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <Avatar name={u.full_name} color={m.color} size={8} />
+                            <div>
+                              <p className="text-sm font-semibold text-slate-200">{u.full_name}</p>
+                              <p className="text-[11px] text-slate-500">{u.email}</p>
+                              {u.phone && <p className="text-[11px] text-slate-600">{u.phone}</p>}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3"><RoleBadge role={u.role} /></td>
+                        <td className="px-4 py-3 text-xs text-slate-400">
+                          {u.dept_name || "—"}
+                          {u.jurisdiction_name && <span className="block text-[10px] text-slate-600">{u.jurisdiction_name}</span>}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${u.is_active ? "text-emerald-400 bg-emerald-400/10" : "text-red-400 bg-red-400/10"}`}>
+                            {u.is_active ? "Active" : "Inactive"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${u.has_firebase_auth ? "text-sky-400 bg-sky-400/10" : "text-amber-400 bg-amber-400/10"}`}>
+                            {u.has_firebase_auth ? "Firebase ✓" : "No Auth"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <button onClick={() => setEditingUser(u)}
+                            className="text-xs font-semibold text-indigo-400 hover:text-indigo-300 transition-colors">
+                            Edit
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <p className="text-xs text-slate-600 text-center">{filteredUsersTab.length} of {staff.length} users</p>
           </div>
         )}
 
@@ -619,8 +920,167 @@ export default function SuperAdminDashboardPage() {
         />
       )}
 
+      {createUserOpen && (
+        <CreateUserDrawer
+          departments={departments}
+          jurisdictions={jurisdictions}
+          onClose={() => setCreateUserOpen(false)}
+          onSuccess={() => { setCreateUserOpen(false); load(); }}
+        />
+      )}
+
       <CRMAgentChat />
     </AppLayout>
+  );
+}
+
+// ── Create User Drawer (dark theme) ───────────────────────────────
+function CreateUserDrawer({ departments, jurisdictions, onClose, onSuccess }) {
+  const [form, setForm] = useState({
+    email: "", full_name: "", role: "official",
+    department_id: "", jurisdiction_id: "",
+    phone: "", preferred_language: "hi", temp_password: "PSCrm@2025",
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const roleMeta = ROLE_META[form.role] || ROLE_META.official;
+
+  const handleSubmit = async () => {
+    if (!form.full_name.trim()) { toast.error("Full name is required"); return; }
+    if (!form.email.trim())     { toast.error("Email is required"); return; }
+    if (!form.department_id && ["official","admin","worker"].includes(form.role)) {
+      toast.error("Department is required for this role"); return;
+    }
+    setSaving(true);
+    try {
+      const res = await createStaffUser(form);
+      console.log("[CreateUser] success:", res);
+      toast.success(`User created! Temp password: ${res.temp_password}`);
+      if (res.reset_link) toast.info("Password reset link generated — share with user", { duration:8000 });
+      onSuccess();
+    } catch(e) {
+      console.error("[CreateUser] FAILED", {
+        status:  e?.response?.status,
+        data:    e?.response?.data,
+        message: e?.message,
+      });
+      toast.error(e?.response?.data?.detail || "User creation failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex justify-end"
+      style={{ background:"rgba(0,0,8,0.7)", backdropFilter:"blur(8px)" }}
+      onClick={e => e.target === e.currentTarget && onClose()}>
+      <aside className="w-full max-w-lg flex flex-col overflow-y-auto"
+        style={{ background:"#0f172a", borderLeft:"1px solid rgba(255,255,255,0.07)" }}>
+
+        <div className="flex items-center gap-3 px-6 py-5"
+          style={{ borderBottom:"1px solid rgba(255,255,255,0.06)" }}>
+          <div className="w-10 h-10 rounded-xl flex items-center justify-center"
+            style={{ background: roleMeta.color + "22" }}>
+            <span className="material-symbols-outlined text-[20px]" style={{ color: roleMeta.color }}>person_add</span>
+          </div>
+          <div className="flex-1">
+            <h2 className="text-lg font-black text-white">Create New User</h2>
+            <p className="text-xs text-slate-400">Creates Firebase account + DB record</p>
+          </div>
+          <button onClick={onClose} className="p-2 rounded-xl hover:bg-white/5 text-slate-400">
+            <span className="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+
+        <div className="flex-1 p-6 flex flex-col gap-5">
+          <div>
+            <label className={S.label}>Role *</label>
+            <div className="grid grid-cols-2 gap-2">
+              {Object.entries(ROLE_META).map(([k, m]) => (
+                <button key={k} type="button" onClick={() => set("role", k)}
+                  className="p-3 rounded-xl text-left transition-all"
+                  style={{
+                    background: form.role===k ? m.color+"22" : "rgba(255,255,255,0.03)",
+                    border: `1px solid ${form.role===k ? m.color+"55" : "rgba(255,255,255,0.08)"}`,
+                  }}>
+                  <span className="material-symbols-outlined text-[16px] block mb-1" style={{ color:m.color }}>{m.icon}</span>
+                  <p className="font-bold text-xs" style={{ color: form.role===k ? "#e2e8f0" : "#64748b" }}>{k.replace("_"," ")}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className={S.label}>Full Name *</label>
+            <input value={form.full_name} onChange={e => set("full_name", e.target.value)}
+              className={S.input} placeholder="e.g. Rajesh Kumar" />
+          </div>
+          <div>
+            <label className={S.label}>Email *</label>
+            <input type="email" value={form.email}
+              onChange={e => set("email", e.target.value.toLowerCase())}
+              className={S.input} placeholder="e.g. rajesh@mcd.delhi.gov.in" />
+          </div>
+          <div>
+            <label className={S.label}>Phone</label>
+            <input type="tel" value={form.phone} onChange={e => set("phone", e.target.value)}
+              className={S.input} placeholder="+91 98765 43210" />
+          </div>
+
+          {["official","admin","super_admin","worker"].includes(form.role) && (
+            <div>
+              <label className={S.label}>Department{["official","admin","worker"].includes(form.role) ? " *" : ""}</label>
+              <select value={form.department_id} onChange={e => set("department_id", e.target.value)} className={S.input}>
+                <option value="">Select department…</option>
+                {departments.map(d => <option key={d.id} value={d.id}>{d.name} ({d.code})</option>)}
+              </select>
+            </div>
+          )}
+
+          {jurisdictions.length > 0 && form.role === "official" && (
+            <div>
+              <label className={S.label}>Jurisdiction</label>
+              <select value={form.jurisdiction_id} onChange={e => set("jurisdiction_id", e.target.value)} className={S.input}>
+                <option value="">All jurisdictions</option>
+                {jurisdictions.map(j => <option key={j.id} value={j.id}>{j.name}</option>)}
+              </select>
+            </div>
+          )}
+
+          <div>
+            <label className={S.label}>Preferred Language</label>
+            <div className="flex gap-2">
+              {[["hi","हिंदी"], ["en","English"]].map(([v,l]) => (
+                <button key={v} type="button" onClick={() => set("preferred_language", v)}
+                  className="flex-1 py-2 rounded-xl text-sm font-bold transition-all"
+                  style={{
+                    background: form.preferred_language===v ? "rgba(99,102,241,0.2)" : "rgba(255,255,255,0.04)",
+                    border: `1px solid ${form.preferred_language===v ? "rgba(99,102,241,0.4)" : "rgba(255,255,255,0.08)"}`,
+                    color: form.preferred_language===v ? "#818cf8" : "#64748b",
+                  }}>{l}</button>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-xl p-4"
+            style={{ background:"rgba(251,191,36,0.08)", border:"1px solid rgba(251,191,36,0.2)" }}>
+            <p className="text-xs font-bold text-amber-400 mb-2">Temporary Password</p>
+            <input value={form.temp_password} onChange={e => set("temp_password", e.target.value)} className={S.input} />
+            <p className="text-[10px] text-amber-500/80 mt-2">
+              Share with the user. A password reset link is also auto-generated.
+            </p>
+          </div>
+        </div>
+
+        <div className="p-6" style={{ borderTop:"1px solid rgba(255,255,255,0.06)" }}>
+          <button onClick={handleSubmit} disabled={saving}
+            className="w-full py-3 rounded-xl font-bold text-sm text-white transition-all disabled:opacity-40"
+            style={{ background: roleMeta.color }}>
+            {saving ? "Creating Account…" : "Create User & Firebase Account"}
+          </button>
+        </div>
+      </aside>
+    </div>
   );
 }
 

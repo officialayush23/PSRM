@@ -280,13 +280,12 @@ def dispatch_notification(
         html = _make_html_email(title, body, cta_url)
         email_error = None
         try:
-            send_email(
+            results["email"] = bool(send_email(
                 to_email=user["email"],
                 subject=title,
                 html_body=html,
                 text_body=body,
-            )
-            results["email"] = True
+            ))
         except Exception as exc:
             results["email"] = False
             email_error = str(exc)

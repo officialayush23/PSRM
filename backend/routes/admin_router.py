@@ -2503,6 +2503,58 @@ def deactivate_user(
             logger.warning("Firebase disable failed: %s", exc)
     return {"status": "deactivated", "user_id": str(user_id)}
 
+
+# ══════════════════════════════════════════════════════════════
+# ★ EMAIL DIAGNOSTIC — POST /admin/debug/email-test
+#   super_admin only — sends a test email to diagnose SMTP config
+# ══════════════════════════════════════════════════════════════
+
+@router.post("/debug/email-test")
+def test_email(
+    db: Session = Depends(get_db),
+    current_user: TokenData = Depends(get_current_user),
+):
+    """Send a test email to the current admin's address to verify SMTP config."""
+    _require(current_user, {"super_admin"})
+    from config import settings
+    from services.notification_service import send_email
+
+    # Fetch current user's email
+    row = db.execute(
+        text("SELECT email, full_name FROM users WHERE id = CAST(:uid AS uuid)"),
+        {"uid": str(current_user.user_id)},
+    ).mappings().first()
+
+    if not row or not row["email"]:
+        raise HTTPException(status_code=400, detail="No email on your account")
+
+    config_info = {
+        "smtp_host":      settings.SMTP_HOST,
+        "smtp_port":      settings.SMTP_PORT,
+        "smtp_user":      settings.SMTP_USER,
+        "smtp_configured": bool(settings.SMTP_HOST and settings.SMTP_USER),
+    }
+
+    if not config_info["smtp_configured"]:
+        return {
+            "status":  "skipped",
+            "reason":  "SMTP_HOST or SMTP_USER not set in environment",
+            "config":  config_info,
+        }
+
+    try:
+        ok = send_email(
+            to_email=row["email"],
+            subject="PS-CRM — SMTP Test Email",
+            html_body=f"<p>SMTP is working. Sent to <b>{row['email']}</b>.</p>",
+            text_body=f"SMTP is working. Sent to {row['email']}.",
+        )
+        return {"status": "sent" if ok else "failed", "to": row["email"], "config": config_info}
+    except Exception as exc:
+        logger.error("Email test failed: %s", exc)
+        return {"status": "error", "error": str(exc), "config": config_info}
+
+
 # ══════════════════════════════════════════════════════════════
 # ★ INFRA NODE — WORKFLOW SUGGESTIONS
 #   GET /admin/infra-nodes/{node_id}/workflow-suggestions

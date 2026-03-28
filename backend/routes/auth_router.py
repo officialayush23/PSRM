@@ -51,6 +51,8 @@ class AuthResponse(BaseModel):
 # ── Helpers ───────────────────────────────────────────────────────
 
 def _verify_firebase_token(id_token: str) -> dict:
+    from dependencies import _ensure_firebase   # ← add this
+    _ensure_firebase()                           # ← add this
     try:
         return firebase_auth.verify_id_token(id_token)
     except firebase_auth.ExpiredIdTokenError:
@@ -59,7 +61,6 @@ def _verify_firebase_token(id_token: str) -> dict:
         raise HTTPException(status_code=401, detail="Invalid Firebase token")
     except Exception as exc:
         raise HTTPException(status_code=401, detail=f"Token verification failed: {exc}")
-
 
 def _resolve_city(db: Session, city_code: Optional[str]) -> City:
     if city_code:

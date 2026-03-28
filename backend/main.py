@@ -33,13 +33,11 @@ app = FastAPI(
 _ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "http://localhost:3000",
-    
-    # Cloud Run backend itself (for internal calls)
+    "http://localhost:8000",
+    "https://psrminno.vercel.app",                                           # ← add
     "https://pscrm-backend-533570030345.asia-south1.run.app",
-    # Add your Firebase Hosting / Vercel / custom frontend URL here:
-    os.getenv("FRONTEND_URL", "http://localhost:5173"),"https://psrminno.vercel.app",
+    os.getenv("FRONTEND_URL", "http://localhost:5173"),
 ]
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_ALLOWED_ORIGINS,

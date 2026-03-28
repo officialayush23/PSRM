@@ -166,7 +166,7 @@ def _semantic_workflow_suggestions(
             text("""
                 SELECT
                     wi.template_id,
-                    MIN(ce.text_embedding <=> :emb::vector(768)) AS min_distance,
+                    MIN(ce.text_embedding <=> CAST(:emb AS vector(768))) AS min_distance,
                     COUNT(DISTINCT wc.complaint_id) AS usage_count
                 FROM complaint_embeddings ce
                 JOIN workflow_complaints wc ON wc.complaint_id = ce.complaint_id
@@ -174,7 +174,7 @@ def _semantic_workflow_suggestions(
                 JOIN workflow_templates  wt ON wt.id = wi.template_id
                 WHERE ce.complaint_id != CAST(:cid AS uuid)
                   AND wt.city_id = CAST(:city AS uuid)
-                  AND (ce.text_embedding <=> :emb::vector(768)) < 0.6
+                  AND (ce.text_embedding <=> CAST(:emb AS vector(768))) < 0.6
                 GROUP BY wi.template_id
                 ORDER BY min_distance ASC, usage_count DESC
                 LIMIT 5
@@ -193,6 +193,10 @@ def _semantic_workflow_suggestions(
         ]
     except Exception as exc:
         logger.warning("Semantic workflow search failed (non-fatal): %s", exc)
+        try:
+            db.rollback()  # reset failed transaction so subsequent queries work
+        except Exception:
+            pass
         return []
 
 
@@ -237,7 +241,8 @@ def suggest_workflows(
         for i in range(len(infra_keywords))
     )
 
-    _BASE = """
+    # ── Base query (no GROUP BY — JOIN already gives 1 version per template) ──
+    _BASE_SQL = """
         SELECT
             wt.id, wt.name, wt.description,
             wt.situation_summary, wt.situation_keywords,
@@ -245,60 +250,48 @@ def suggest_workflows(
             wtv.id AS version_id
         FROM workflow_templates wt
         JOIN workflow_template_versions wtv
-            ON  wtv.template_id       = wt.id
-            AND wtv.is_active          = TRUE
-            AND wtv.is_latest_version  = TRUE
-        {where}
-        GROUP BY wt.id, wt.name, wt.description, wt.situation_summary,
-                 wt.situation_keywords, wt.situation_infra_codes,
-                 wt.times_used, wt.avg_completion_days, wtv.id
+            ON  wtv.template_id      = wt.id
+            AND wtv.is_active        = TRUE
+            AND wtv.is_latest_version = TRUE
+        WHERE wt.city_id = CAST(:city_id AS uuid)
         ORDER BY wt.times_used DESC, wt.avg_completion_days ASC NULLS LAST
-        LIMIT {limit}
+        LIMIT 20
     """
+
+    # Fetch all templates for this city, then filter in Python
+    # This avoids dynamic SQL string issues with GROUP BY + ILIKE
+    all_templates = db.execute(
+        text(_BASE_SQL),
+        {"city_id": city_id},
+    ).mappings().all()
 
     seen_ids: set = set()
     candidates: list = []
 
-    # Phase 2a — exact infra code match OR keyword in name
-    kw_params: Dict[str, Any] = {"city_id": city_id, "infra_code": infra_type_code}
-    for i, kw in enumerate(infra_keywords):
-        kw_params[f"kw{i}"] = f"%{kw}%"
+    # Phase 2 — structural match: infra code OR keyword in name/description
+    for r in all_templates:
+        rd = dict(r)
+        infra_codes = rd.get("situation_infra_codes") or []
+        name_lower  = (rd.get("name") or "").lower()
+        desc_lower  = (rd.get("description") or "").lower()
+        summ_lower  = (rd.get("situation_summary") or "").lower()
 
-    where_phrase = f"""
-        WHERE wt.city_id = CAST(:city_id AS uuid)
-          AND (
-            :infra_code = ANY(COALESCE(wt.situation_infra_codes, ARRAY[]::text[]))
-            OR EXISTS (
-                SELECT 1 FROM infra_types it2
-                WHERE it2.code = :infra_code AND wtv.infra_type_id = it2.id
-            )
-            {("OR " + keyword_conditions) if keyword_conditions else ""}
-          )
-    """
+        is_structural = (
+            infra_type_code in infra_codes
+            or any(kw.lower() in name_lower or kw.lower() in desc_lower or kw.lower() in summ_lower
+                   for kw in infra_keywords)
+        )
 
-    matched = db.execute(
-        text(_BASE.format(where=where_phrase, limit=6)),
-        kw_params,
-    ).mappings().all()
+        if is_structural:
+            seen_ids.add(str(rd["id"]))
+            candidates.append(rd | {"_match_type": "structural"})
 
-    for r in matched:
-        seen_ids.add(str(r["id"]))
-        candidates.append(dict(r) | {"_match_type": "structural"})
-
-    # Phase 3 — fill remaining from any template
-    if len(candidates) < 6:
-        others = db.execute(
-            text(_BASE.format(
-                where="WHERE wt.city_id = CAST(:city_id AS uuid)",
-                limit=12,
-            )),
-            {"city_id": city_id},
-        ).mappings().all()
-        for r in others:
-            if str(r["id"]) not in seen_ids:
-                candidates.append(dict(r) | {"_match_type": "fallback"})
-            if len(candidates) >= 9:
-                break
+    # Phase 3 — fill remaining slots with any template
+    for r in all_templates:
+        if str(r["id"]) not in seen_ids:
+            candidates.append(dict(r) | {"_match_type": "fallback"})
+        if len(candidates) >= 9:
+            break
 
     if not candidates:
         return []

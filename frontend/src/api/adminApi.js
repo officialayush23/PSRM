@@ -204,7 +204,7 @@ export async function fetchInfraNodeAiSummary(nodeId) {
 
 // ── Admin task list (dept-scoped) ─────────────────────────────────
 
-export async function fetchAdminTaskList({ status, deptId, limit = 50, offset = 0 } = {}) {
+export async function fetchAdminTaskList({ status, deptId, limit = 100, offset = 0 } = {}) {
   const params = { limit, offset };
   if (status)  params.status  = status;
   if (deptId)  params.dept_id = deptId;

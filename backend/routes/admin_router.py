@@ -2460,6 +2460,9 @@ def get_infra_node_workflow_suggestions(
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
+    except Exception as exc:
+        logger.error("workflow suggestions failed for node %s: %s", node_id, exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to generate workflow suggestions: {exc}")
 
     return result
 

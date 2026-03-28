@@ -737,7 +737,7 @@ function TasksTab({ onTenderRequest }) {
 
   const reload = () => {
     setLoading(true);
-    fetchAdminTaskList({ limit:300 })
+    fetchAdminTaskList({ limit:200 })
       .then(d => setAllTasks(d.items||[]))
       .finally(() => setLoading(false));
   };

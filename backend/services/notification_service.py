@@ -55,10 +55,10 @@ TEMPLATES = {
         "body_hi":  "आपकी शिकायत #{number} {dept_name} को सौंपी गई है।",
     },
     "WORKFLOW_STARTED": {
-        "title_en": "Work Has Begun",
-        "body_en":  "Work on your complaint #{number} has started. Expected completion: {eta}.",
-        "title_hi": "काम शुरू हो गया",
-        "body_hi":  "आपकी शिकायत #{number} पर काम शुरू हो गया है।",
+        "title_en": "Work Has Begun on Your Complaint",
+        "body_en":  "Work on complaint #{number} has started. {worker_info}Expected completion: {eta}.",
+        "title_hi": "आपकी शिकायत पर काम शुरू हो गया",
+        "body_hi":  "शिकायत #{number} पर काम शुरू हो गया है। {worker_info}अनुमानित समाधान: {eta}।",
     },
     "MIDWAY_SURVEY": {
         "title_en": "How is the work going?",
@@ -74,9 +74,9 @@ TEMPLATES = {
     },
     "TASK_ASSIGNED": {
         "title_en": "New Task Assigned",
-        "body_en":  "You have been assigned a new task: {task_title}. Please check the app.",
+        "body_en":  "You have been assigned: {task_title}. Complaint: #{number}. Due: {eta}. Please check the app.",
         "title_hi": "नया काम सौंपा गया",
-        "body_hi":  "आपको एक नया काम सौंपा गया है: {task_title}",
+        "body_hi":  "आपको काम सौंपा गया: {task_title}। शिकायत #{number}। कृपया ऐप देखें।",
     },
     "SURVEY_ALERT": {
         "title_en": "⚠️ Task Quality Alert",
@@ -274,7 +274,8 @@ def dispatch_notification(
         )
 
     # ── Email ─────────────────────────────────────────────────────
-    if user["email"] and user["email_opt_in"]:
+    # email_opt_in defaults to True — send unless explicitly opted out
+    if user["email"] and (user["email_opt_in"] is None or user["email_opt_in"]):
         html = _make_html_email(title, body, cta_url)
         results["email"] = send_email(
             to_email=user["email"],

@@ -534,11 +534,32 @@ Rules:
 
     full_prompt = f"{history_str}{db_section}Official: {user_message}\nPS-CRM:"
 
-    answer = "I'm having trouble connecting. Please try again in a moment."
+    answer = ""
     try:
         answer = _call_gemini(system, full_prompt, max_tokens=800)
     except Exception as exc:
         logger.error("CRM chat Gemini failed: %s", exc)
+
+    # If Gemini returned empty (safety block or timeout), build a data-driven fallback
+    if not answer:
+        if query_data and isinstance(query_data, list) and len(query_data) > 0:
+            count = len(query_data)
+            first = query_data[0]
+            # Build a summary from the DB data directly
+            answer = (
+                f"Here are the {count} result(s) I found. "
+                f"First item: {first.get('title') or first.get('template_name') or first.get('infra_type') or str(first)[:80]}. "
+                f"Full data is shown below in the table."
+            )
+        else:
+            answer = (
+                f"Based on current data — "
+                f"Open complaints: {kpi_c.get('open_total', '?')} | "
+                f"Critical: {kpi_c.get('critical_open', '?')} | "
+                f"Tasks overdue: {kpi_t.get('overdue', '?')} | "
+                f"Needs workflow: {kpi_c.get('needs_workflow', '?')}. "
+                f"Ask me about specific complaints, tasks, or infra nodes."
+            )
 
     return {"answer": answer, "data": query_data}
 

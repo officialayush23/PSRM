@@ -20,24 +20,20 @@ router = APIRouter(prefix="/pubsub", tags=["PubSub"])
 
 def _verify_pubsub_request(request: Request) -> None:
     """
-    Verify Pub/Sub push request. Accepts:
-    1. ?token=<secret> query param  (our subscription URLs use this)
-    2. Authorization: Bearer <secret> header (fallback)
-    3. No secret configured → allow all (dev mode)
+    Allow either:
+    - GCP push-style request marker header (X-Goog-Resource-State), or
+    - Bearer token matching PUBSUB_PUSH_SECRET when configured.
     """
     if not settings.PUBSUB_PUSH_SECRET:
         return
 
-    # Primary: query param token (set in subscription push endpoint URL)
-    token = request.query_params.get("token", "")
-    if token and token == settings.PUBSUB_PUSH_SECRET:
+    if request.headers.get("x-goog-resource-state"):
         return
 
-    # Fallback: Bearer header
     auth_header = request.headers.get("authorization", "")
     if auth_header.lower().startswith("bearer "):
-        bearer = auth_header.split(" ", 1)[1].strip()
-        if bearer == settings.PUBSUB_PUSH_SECRET:
+        token = auth_header.split(" ", 1)[1].strip()
+        if token == settings.PUBSUB_PUSH_SECRET:
             return
 
     raise HTTPException(status_code=401, detail="Unauthorized Pub/Sub push request")
@@ -142,38 +138,90 @@ async def pubsub_complaint_received(request: Request, db: Session = Depends(get_
     body = await request.json()
     payload = _decode_pubsub_envelope(body)
 
-    complaint_id = str(payload.get("complaint_id") or "")
+    complaint_id  = str(payload.get("complaint_id") or "")
     infra_node_id = payload.get("infra_node_id")
-    is_repeat = bool(payload.get("is_repeat"))
-    event_type = str(payload.get("event_type") or "COMPLAINT_RECEIVED")
+    is_repeat     = bool(payload.get("is_repeat"))
+    event_type    = str(payload.get("event_type") or "COMPLAINT_RECEIVED")
+    citizen_id    = str(payload.get("citizen_id") or payload.get("user_id") or "")
+    complaint_number = str(payload.get("complaint_number") or "")
 
-    if is_repeat and complaint_id:
-        officials = db.execute(
-            text(
-                """
-                SELECT DISTINCT u.id, c.complaint_number
-                FROM complaints c
-                JOIN users u ON u.department_id = ANY(c.agent_suggested_dept_ids)
-                WHERE c.id = CAST(:cid AS uuid)
-                  AND u.role = 'official'
-                  AND u.is_active = TRUE
-                """
-            ),
-            {"cid": complaint_id},
-        ).mappings().all()
-
-        number = None
-        if officials:
-            number = officials[0].get("complaint_number")
-
-        for row in officials:
+    # ── 1. Notify citizen that complaint was registered ───────────
+    if citizen_id and complaint_number and complaint_id:
+        try:
             dispatch_notification(
                 db,
-                user_id=str(row["id"]),
-                event_type="REPEAT_COMPLAINT_ALERT",
-                variables={"number": number or "-"},
-                data={"complaint_id": complaint_id, "infra_node_id": str(infra_node_id or "")},
+                user_id=citizen_id,
+                event_type="COMPLAINT_RECEIVED",
+                variables={"number": complaint_number},
+                data={"complaint_id": complaint_id},
+                cta_url=f"/complaints/{complaint_id}",
             )
+        except Exception as exc:
+            logger.warning("Citizen complaint_received notification failed: %s", exc)
+
+    # ── 2. If repeat → notify officials ──────────────────────────
+    if is_repeat and complaint_id:
+        try:
+            officials = db.execute(
+                text("""
+                    SELECT DISTINCT u.id, c.complaint_number
+                    FROM complaints c
+                    JOIN users u ON u.department_id = ANY(c.agent_suggested_dept_ids)
+                    WHERE c.id = CAST(:cid AS uuid)
+                      AND u.role IN ('official', 'admin')
+                      AND u.is_active = TRUE
+                """),
+                {"cid": complaint_id},
+            ).mappings().all()
+            for row in officials:
+                dispatch_notification(
+                    db,
+                    user_id=str(row["id"]),
+                    event_type="REPEAT_COMPLAINT_ALERT",
+                    variables={"number": complaint_number or str(row.get("complaint_number") or "-")},
+                    data={"complaint_id": complaint_id, "infra_node_id": str(infra_node_id or "")},
+                )
+        except Exception as exc:
+            logger.warning("Repeat complaint official notification failed: %s", exc)
+
+    # ── 3. Notify citizens within 500m of infra node ──────────────
+    if infra_node_id and complaint_id:
+        try:
+            node_loc = db.execute(
+                text("SELECT location FROM infra_nodes WHERE id = CAST(:nid AS uuid)"),
+                {"nid": str(infra_node_id)},
+            ).scalar()
+            if node_loc:
+                area_users = db.execute(
+                    text("""
+                        SELECT DISTINCT u.id
+                        FROM users u
+                        WHERE u.id != CAST(:cid AS uuid)
+                          AND u.is_active = TRUE
+                          AND u.role = 'citizen'
+                          AND u.fcm_token IS NOT NULL
+                          AND EXISTS (
+                              SELECT 1 FROM complaints c2
+                              WHERE c2.citizen_id = u.id
+                                AND ST_DWithin(c2.location::geography, CAST(:loc AS geography), 500)
+                          )
+                    """),
+                    {"cid": citizen_id or "00000000-0000-0000-0000-000000000000",
+                     "loc": str(node_loc)},
+                ).mappings().all()
+                for row in area_users:
+                    try:
+                        dispatch_notification(
+                            db,
+                            user_id=str(row["id"]),
+                            event_type="COMPLAINT_RECEIVED",
+                            variables={"number": complaint_number},
+                            data={"complaint_id": complaint_id, "infra_node_id": str(infra_node_id)},
+                        )
+                    except Exception:
+                        pass
+        except Exception as exc:
+            logger.warning("Area citizen notification failed: %s", exc)
 
     _write_pubsub_log(
         db,
@@ -181,6 +229,7 @@ async def pubsub_complaint_received(request: Request, db: Session = Depends(get_
         event_type=event_type,
         payload=payload,
         complaint_id=complaint_id,
+        user_id=citizen_id,
     )
     db.commit()
     return {"status": "processed"}
@@ -428,6 +477,8 @@ async def pubsub_surveys(request: Request, db: Session = Depends(get_db)):
     )
 
     notif_event = "MIDWAY_SURVEY" if survey_type == "midway" else "COMPLAINT_RESOLVED"
+
+    # Notify the complaint citizen
     dispatch_notification(
         db,
         user_id=str(complaint["citizen_id"]),
@@ -438,7 +489,53 @@ async def pubsub_surveys(request: Request, db: Session = Depends(get_db)):
             "complaint_id": complaint_id,
             "workflow_instance_id": workflow_instance_id,
         },
+        cta_url=f"/survey/{survey_instance_id}",
     )
+
+    # Also notify citizens within 500m of infra node (area survey)
+    if survey_type == "completion":
+        try:
+            node_loc = db.execute(
+                text("""
+                    SELECT n.location FROM complaints c
+                    JOIN infra_nodes n ON n.id = c.infra_node_id
+                    WHERE c.id = CAST(:cid AS uuid) AND n.location IS NOT NULL
+                    LIMIT 1
+                """),
+                {"cid": complaint_id},
+            ).scalar()
+            if node_loc:
+                area_users = db.execute(
+                    text("""
+                        SELECT DISTINCT u.id FROM users u
+                        WHERE u.id != CAST(:citizen AS uuid)
+                          AND u.is_active = TRUE
+                          AND u.role = 'citizen'
+                          AND u.fcm_token IS NOT NULL
+                          AND EXISTS (
+                              SELECT 1 FROM complaints c2
+                              WHERE c2.citizen_id = u.id
+                                AND ST_DWithin(c2.location::geography, CAST(:loc AS geography), 500)
+                                AND c2.created_at > NOW() - INTERVAL '90 days'
+                          )
+                        LIMIT 50
+                    """),
+                    {"citizen": str(complaint["citizen_id"]), "loc": str(node_loc)},
+                ).mappings().all()
+                for row in area_users:
+                    try:
+                        dispatch_notification(
+                            db,
+                            user_id=str(row["id"]),
+                            event_type="MIDWAY_SURVEY",
+                            variables={"number": complaint["complaint_number"]},
+                            data={"complaint_id": complaint_id, "survey_instance_id": survey_instance_id},
+                            cta_url=f"/survey/{survey_instance_id}",
+                        )
+                    except Exception:
+                        pass
+        except Exception as exc:
+            logger.warning("Area survey notification failed: %s", exc)
 
     _write_pubsub_log(
         db,

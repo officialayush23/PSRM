@@ -1016,7 +1016,11 @@ function SurveyRolloutForm() {
   const [sending, setSending] = useState(false);
 
   useEffect(() => {
-    fetchComplaintQueue({ status:"in_progress", limit:30 }).then(d => setComplaints(d.items||[]));
+    fetchComplaintQueue({ limit:50 }).then(d => {
+      // Show complaints that have a workflow or are active
+      const active = (d.items||[]).filter(c => !['resolved','closed','rejected'].includes(c.status));
+      setComplaints(active);
+    });
   }, []);
 
   const send = async () => {
@@ -1037,7 +1041,7 @@ function SurveyRolloutForm() {
         {complaints.map(c => <option key={c.id} value={c.id}>#{c.complaint_number} — {c.title}</option>)}
       </select>
       <div className="flex gap-2">
-        {["midway","closing","worker_feedback"].map(t => (
+        {["midway","completion","worker_feedback"].map(t => (
           <button key={t} onClick={() => setSurveyType(t)}
             className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all ${surveyType===t ? "" : "gbtn-ghost"}`}
             style={surveyType===t ? { background:"rgba(56,189,248,0.15)", border:"1px solid rgba(56,189,248,0.3)", color:"#38bdf8" } : {}}>
@@ -1575,7 +1579,11 @@ function TendersTab({ prefillTask, onClear }) {
   const [complaints, setComplaints] = useState([]);
 
   useEffect(() => {
-    fetchComplaintQueue({ status:"in_progress", limit:30 }).then(d => setComplaints(d.items||[]));
+    fetchComplaintQueue({ limit:50 }).then(d => {
+      // Show complaints that have a workflow or are active
+      const active = (d.items||[]).filter(c => !['resolved','closed','rejected'].includes(c.status));
+      setComplaints(active);
+    });
     if (prefillTask) {
       setForm(f => ({...f, complaint_id: prefillTask.complaint_id||"", title:`Tender for: ${prefillTask.title}`, workflow_step_instance_id:prefillTask.workflow_step_instance_id}));
     }
@@ -1845,4 +1853,4 @@ export default function OfficialDashboardPage() {
       <CRMAgentChat />
     </AppLayout>
   );
-}
+} 

@@ -252,123 +252,148 @@ async def pubsub_workflow_events(request: Request, db: Session = Depends(get_db)
     step_number = payload.get("step_number")
     total_steps = payload.get("total_steps")
 
-    if event_type == "WORKFLOW_STEP_COMPLETED" and isinstance(step_number, int) and isinstance(total_steps, int):
-        midpoint = total_steps // 2
-        if midpoint > 0 and step_number == midpoint:
-            db.execute(
-                text(
-                    """
-                    INSERT INTO cloud_task_schedule (
-                        cloud_task_name,
-                        queue_name,
-                        task_type,
-                        workflow_instance_id,
-                        payload,
-                        scheduled_for,
-                        schedule_delay_seconds,
-                        status
-                    ) VALUES (
-                        :cloud_task_name,
-                        :queue_name,
-                        'TRIGGER_SURVEY',
-                        CAST(:workflow_instance_id AS uuid),
-                        CAST(:payload AS jsonb),
-                        NOW() + INTERVAL '24 hours',
-                        86400,
-                        'scheduled'
-                    )
-                    """
-                ),
-                {
-                    "cloud_task_name": f"trigger-survey-{workflow_instance_id}-{int(datetime.now(timezone.utc).timestamp())}",
-                    "queue_name": "ps-crm-survey-queue",
-                    "workflow_instance_id": workflow_instance_id,
-                    "payload": json.dumps(
-                        {
-                            "workflow_instance_id": workflow_instance_id,
-                            "event_type": event_type,
-                            "step_number": step_number,
-                            "total_steps": total_steps,
-                            "survey_type": "midway",
-                        }
-                    ),
-                },
-            )
+
 
     if event_type == "WORKFLOW_COMPLETED":
-        complaint_id = str(payload.get("complaint_id") or "")
-        if complaint_id:
-            complaint = db.execute(
-                text("SELECT citizen_id, complaint_number FROM complaints WHERE id = CAST(:cid AS uuid)"),
-                {"cid": complaint_id},
-            ).mappings().first()
-            if complaint:
+        # On workflow completion → send COMPLETION survey to all linked citizens
+        try:
+            linked = db.execute(
+                text("""
+                    SELECT DISTINCT c.id AS complaint_id, c.citizen_id, c.complaint_number
+                    FROM workflow_complaints wc
+                    JOIN complaints c ON c.id = wc.complaint_id
+                    WHERE wc.workflow_instance_id = CAST(:wid AS uuid)
+                      AND c.is_deleted = FALSE
+                """),
+                {"wid": workflow_instance_id},
+            ).mappings().all()
+
+            template_id = _get_template_id(db, "completion")
+            if not template_id:
+                template_id = _get_template_id(db, "midway")  # fallback
+
+            for row in linked:
+                cid = str(row["complaint_id"])
+                citizen_id = str(row["citizen_id"])
+                complaint_number = row["complaint_number"]
+
+                if not template_id:
+                    continue
+
+                already = db.execute(
+                    text("""
+                        SELECT 1 FROM survey_instances
+                        WHERE complaint_id = CAST(:cid AS uuid)
+                          AND survey_type = 'completion'
+                          AND status IN ('pending','sent')
+                        LIMIT 1
+                    """),
+                    {"cid": cid},
+                ).first()
+                if already:
+                    continue
+
+                si_id = str(uuid.uuid4())
+                db.execute(
+                    text("""
+                        INSERT INTO survey_instances (
+                            id, template_id, workflow_instance_id, complaint_id,
+                            survey_type, target_user_id, target_role,
+                            status, triggered_by, channel, expires_at
+                        ) VALUES (
+                            CAST(:id AS uuid), CAST(:tid AS uuid),
+                            CAST(:wid AS uuid), CAST(:cid AS uuid),
+                            'completion', CAST(:uid AS uuid), 'citizen',
+                            'pending', 'agent', 'portal',
+                            NOW() + INTERVAL '7 days'
+                        )
+                    """),
+                    {
+                        "id": si_id, "tid": template_id,
+                        "wid": _to_uuid_or_none(workflow_instance_id),
+                        "cid": cid, "uid": citizen_id,
+                    },
+                )
+                dispatch_notification(
+                    db,
+                    user_id=citizen_id,
+                    event_type="COMPLAINT_RESOLVED",
+                    variables={"number": complaint_number},
+                    data={
+                        "survey_instance_id": si_id,
+                        "complaint_id": cid,
+                        "workflow_instance_id": workflow_instance_id,
+                    },
+                    cta_url=f"/survey/{si_id}",
+                )
+        except Exception as exc:
+            logger.warning("Completion survey dispatch failed: %s", exc)
+
+    if event_type == "WORKFLOW_STEP_COMPLETED" and isinstance(step_number, int) and isinstance(total_steps, int):
+        # At midpoint → send midway survey to all linked citizens
+        midpoint = total_steps // 2
+        if midpoint > 0 and step_number == midpoint:
+            try:
+                linked = db.execute(
+                    text("""
+                        SELECT DISTINCT c.id AS complaint_id, c.citizen_id, c.complaint_number
+                        FROM workflow_complaints wc
+                        JOIN complaints c ON c.id = wc.complaint_id
+                        WHERE wc.workflow_instance_id = CAST(:wid AS uuid)
+                          AND c.is_deleted = FALSE
+                    """),
+                    {"wid": workflow_instance_id},
+                ).mappings().all()
+
                 template_id = _get_template_id(db, "midway")
-                if template_id:
-                    already_exists = db.execute(
-                        text(
-                            """
-                            SELECT 1
-                            FROM survey_instances
-                            WHERE complaint_id = CAST(:complaint_id AS uuid)
+                for row in linked:
+                    cid = str(row["complaint_id"])
+                    citizen_id = str(row["citizen_id"])
+                    if not template_id:
+                        continue
+                    already = db.execute(
+                        text("""
+                            SELECT 1 FROM survey_instances
+                            WHERE complaint_id = CAST(:cid AS uuid)
                               AND survey_type = 'midway'
-                              AND status IN ('pending', 'sent')
+                              AND status IN ('pending','sent')
                             LIMIT 1
-                            """
-                        ),
-                        {"complaint_id": complaint_id},
+                        """),
+                        {"cid": cid},
                     ).first()
-                    if not already_exists:
-                        survey_instance_id = str(uuid.uuid4())
-                        db.execute(
-                            text(
-                                """
-                                INSERT INTO survey_instances (
-                                    id,
-                                    template_id,
-                                    workflow_instance_id,
-                                    complaint_id,
-                                    survey_type,
-                                    target_user_id,
-                                    target_role,
-                                    status,
-                                    triggered_by,
-                                    channel,
-                                    expires_at
-                                ) VALUES (
-                                    CAST(:id AS uuid),
-                                    CAST(:template_id AS uuid),
-                                    CAST(:workflow_instance_id AS uuid),
-                                    CAST(:complaint_id AS uuid),
-                                    'midway',
-                                    CAST(:target_user_id AS uuid),
-                                    'citizen',
-                                    'pending',
-                                    'agent',
-                                    'portal',
-                                    NOW() + INTERVAL '7 days'
-                                )
-                                """
-                            ),
-                            {
-                                "id": survey_instance_id,
-                                "template_id": template_id,
-                                "workflow_instance_id": _to_uuid_or_none(workflow_instance_id),
-                                "complaint_id": complaint_id,
-                                "target_user_id": str(complaint["citizen_id"]),
-                            },
-                        )
-                        dispatch_notification(
-                            db,
-                            user_id=str(complaint["citizen_id"]),
-                            event_type="MIDWAY_SURVEY",
-                            variables={"number": complaint["complaint_number"]},
-                            data={
-                                "survey_instance_id": survey_instance_id,
-                                "complaint_id": complaint_id,
-                                "workflow_instance_id": workflow_instance_id,
-                            },
-                        )
+                    if already:
+                        continue
+                    si_id = str(uuid.uuid4())
+                    db.execute(
+                        text("""
+                            INSERT INTO survey_instances (
+                                id, template_id, workflow_instance_id, complaint_id,
+                                survey_type, target_user_id, target_role,
+                                status, triggered_by, channel, expires_at
+                            ) VALUES (
+                                CAST(:id AS uuid), CAST(:tid AS uuid),
+                                CAST(:wid AS uuid), CAST(:cid AS uuid),
+                                'midway', CAST(:uid AS uuid), 'citizen',
+                                'pending', 'agent', 'portal',
+                                NOW() + INTERVAL '7 days'
+                            )
+                        """),
+                        {
+                            "id": si_id, "tid": template_id,
+                            "wid": _to_uuid_or_none(workflow_instance_id),
+                            "cid": cid, "uid": citizen_id,
+                        },
+                    )
+                    dispatch_notification(
+                        db,
+                        user_id=citizen_id,
+                        event_type="MIDWAY_SURVEY",
+                        variables={"number": row["complaint_number"]},
+                        data={"survey_instance_id": si_id, "complaint_id": cid},
+                        cta_url=f"/survey/{si_id}",
+                    )
+            except Exception as exc:
+                logger.warning("Midway survey dispatch failed: %s", exc)
 
     _write_pubsub_log(
         db,

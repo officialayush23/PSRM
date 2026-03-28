@@ -2460,9 +2460,6 @@ def get_infra_node_workflow_suggestions(
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc))
-    except Exception as exc:
-        logger.error("workflow suggestions failed for node %s: %s", node_id, exc, exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Failed to generate workflow suggestions: {exc}")
 
     return result
 
@@ -2709,7 +2706,7 @@ def assign_workflow_workers(
                 UPDATE tasks t
                 SET assigned_worker_id     = CAST(:w AS uuid),
                     assigned_contractor_id = CAST(:c AS uuid),
-                    status     = CASE WHEN status = 'pending' THEN 'accepted' ELSE status END,
+                    status     = CASE WHEN t.status = 'pending' THEN 'accepted' ELSE t.status END,
                     override_by = CAST(:by AS uuid),
                     updated_at  = NOW()
                 FROM workflow_step_instances wsi
